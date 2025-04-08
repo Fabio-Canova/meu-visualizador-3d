@@ -100,6 +100,8 @@
         }
 
         // 5. Inicia o carregamento
+        // Adicione antes do loadModel()
+        THREE.Cache.enabled = true;
         loadModel();
 
         // 6. Animação
