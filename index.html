@@ -1,84 +1,101 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>3D Viewer</title>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    canvas { display: block; }
-    #loading {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-family: Arial;
-      color: #333;
-    }
-  </style>
+    <title>Visualizador 3D</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; width: 100%; height: 100%; }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: Arial;
+            color: #333;
+        }
+    </style>
 </head>
 <body>
-  <div id="loading">Loading 3D model...</div>
-  
-  <!-- THREE.JS CORE -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-  
-  <!-- LOADERS (CORRECTED PATHS) -->
-  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/jsm/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/jsm/libs/draco/gltf/draco_wasm_wrapper.js"></script>
+    <div id="loading">Carregando modelo 3D...</div>
 
-  <script>
-    // Initialize scene
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
-
-    // Lighting (essential!)
-    const light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(1,1,1);
-    scene.add(light);
-    scene.add(new THREE.AmbientLight(0x404040));
-
-    // Draco Loader Configuration
-    const loader = new GLTFLoader();
-    const dracoLoader = new DRACOLoader();
-    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
-    loader.setDRACOLoader(dracoLoader);
-
-    // Load model with error handling
-    loader.load(
-      './Novo_3D_GLB.glb',
-      (gltf) => {
-        document.getElementById('loading').remove();
-        scene.add(gltf.scene);
-        camera.position.z = 5;
-        
-        // Notify Streamlit if embedded
-        if (window.parent !== window) {
-          window.parent.postMessage({ type: 'model-loaded' }, '*');
+    <!-- Carrega Three.js de forma modular -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.132.2/examples/jsm/"
+            }
         }
-      },
-      undefined,
-      (error) => {
-        console.error('Failed to load:', error);
-        document.getElementById('loading').textContent = 'Error loading model. Check console.';
-      }
-    );
+    </script>
 
-    // Animation loop
-    function animate() {
-      requestAnimationFrame(animate);
-      renderer.render(scene, camera);
-    }
-    animate();
+    <script type="module">
+        // Importações modernas
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-    // Handle window resize
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth/window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-  </script>
+        // Cena
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xeeeeee);
+        
+        // Câmera
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 5;
+
+        // Renderizador
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Controles
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        // Iluminação
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(1, 1, 1);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x404040));
+
+        // Loader com Draco
+        const loader = new GLTFLoader();
+        const dracoLoader = new DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
+        loader.setDRACOLoader(dracoLoader);
+
+        // Carrega modelo
+        loader.load(
+            './modelo.glb',
+            (gltf) => {
+                document.getElementById('loading').remove();
+                scene.add(gltf.scene);
+                console.log('Modelo carregado!');
+            },
+            (progress) => {
+                const percent = (progress.loaded / progress.total * 100).toFixed(2);
+                document.getElementById('loading').textContent = `Carregando... ${percent}%`;
+            },
+            (error) => {
+                console.error('Erro:', error);
+                document.getElementById('loading').textContent = 'Erro ao carregar. Verifique o console.';
+            }
+        );
+
+        // Animação
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Redimensionamento
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
