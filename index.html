@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Visualizador 3D para Streamlit</title>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { width: 100%; height: 100%; display: block; }
+  </style>
+</head>
+<body>
+  <script>
+    // Configuração básica
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Iluminação
+    const light = new THREE.AmbientLight(0xffffff, 1);
+    scene.add(light);
+
+    // Carregar modelo
+    const loader = new THREE.GLTFLoader();
+    loader.load(
+      'modelo.glb',  // SUBSTITUA pelo nome do seu arquivo
+      (gltf) => {
+        scene.add(gltf.scene);
+        camera.position.z = 5;
+        
+        // Interação: clique para selecionar
+        window.addEventListener('click', (event) => {
+          const mouse = new THREE.Vector2(
+            (event.clientX / window.innerWidth) * 2 - 1,
+            -(event.clientY / window.innerHeight) * 2 + 1
+          );
+          const raycaster = new THREE.Raycaster();
+          raycaster.setFromCamera(mouse, camera);
+          const intersects = raycaster.intersectObjects(scene.children, true);
+          
+          if (intersects.length > 0) {
+            console.log("Elemento selecionado:", intersects[0].object.name);
+          }
+        });
+      },
+      undefined,
+      (error) => console.error('Erro ao carregar:', error)
+    );
+
+    // Animação
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
