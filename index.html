@@ -72,8 +72,13 @@
     loader.setDRACOLoader(dracoLoader);
 
     // 7. Carregar modelo
+    // Adicione esta configuração antes do loader.load()
+    loader.manager.onStart = () => {
+      console.log("Iniciando carregamento...");
+    };
+    
     loader.load(
-      './modelo.glb', // SUBSTITUA pelo nome do seu arquivo
+      './Novo_3D_GLB.glb', // SUBSTITUA pelo nome do seu arquivo
       (gltf) => {
         document.getElementById('loading').style.display = 'none';
         
