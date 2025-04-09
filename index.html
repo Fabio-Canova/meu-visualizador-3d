@@ -98,12 +98,41 @@
         animate();
 
         // 7. Redimensionamento
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+        window.addEventListener('message', (event) => {
+            // Verifica a origem por segurança
+            if (event.origin !== "https://YOUR-STREAMLIT-APP-URL.streamlit.app" && 
+                event.origin !== "http://localhost:8501") {
+                return;
+            }
+        
+            if (event.data.type === 'select-element' && event.data.elementName) {
+                const element = scene.getObjectByName(event.data.elementName);
+                if (element) {
+                    // Foca no elemento com animação suave
+                    const boundingBox = new THREE.Box3().setFromObject(element);
+                    const center = boundingBox.getCenter(new THREE.Vector3());
+                    
+                    new TWEEN.Tween(camera.position)
+                        .to({
+                            x: center.x,
+                            y: center.y,
+                            z: center.z + boundingBox.getSize(new THREE.Vector3()).length() * 1.5
+                        }, 1000)
+                        .easing(TWEEN.Easing.Quadratic.Out)
+                        .start();
+                    
+                    new TWEEN.Tween(camera.rotation)
+                        .to({
+                            x: -0.2,  // Ajuste estes valores conforme necessário
+                            y: 0,
+                            z: 0
+                        }, 1000)
+                        .easing(TWEEN.Easing.Quadratic.Out)
+                        .start();
+                }
+            }
         });
-
+        
 
 
 
