@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Visualizador 3D Interativo</title>
+    <title>Visualizador 3D com Draco</title>
     <style>
         body { margin: 0; overflow: hidden; }
         #loading {
@@ -17,117 +17,61 @@
             font-family: Arial;
         }
     </style>
-    <!-- Dependências -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/DRACOLoader.js"></script>
 </head>
 <body>
     <div id="loading">Carregando modelo...</div>
 
+    <!-- Three.js e dependências CORRETAS -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+    <!-- ATENÇÃO: Novo caminho para DracoLoader -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/DRACOLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+
     <script>
-        // 1. Configuração básica
+        // 1. Configuração inicial
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x222222);
-        
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-        camera.position.z = 5;
-        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
-        
+
         // 2. Controles
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        
+
         // 3. Iluminação
         const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(1, 1, 1);
+        light.position.set(1,1,1);
         scene.add(light);
         scene.add(new THREE.AmbientLight(0x404040));
 
-        // 4. Loader com Draco
+        // 4. Configuração CORRETA do Draco Loader
         const loader = new THREE.GLTFLoader();
+        
+        // Inicialização correta do DRACOLoader
         const dracoLoader = new THREE.DRACOLoader();
         dracoLoader.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
         loader.setDRACOLoader(dracoLoader);
 
-        // 5. Variáveis globais
-        let model;
-        const elementCache = {};
-        const originalMaterials = {};
-        let lastZoom = 1.0;
-        let activeAnimations = [];
-
-        // 6. Sistema de animação substituto
-        function animateTo(target, properties, duration, easing = 'easeOutQuad', onComplete) {
-            const startValues = {};
-            const startTime = performance.now();
-            
-            // Armazena os valores iniciais
-            for (const key in properties) {
-                startValues[key] = target[key];
-            }
-            
-            // Função de easing
-            const easings = {
-                easeOutQuad: t => t * (2 - t),
-                linear: t => t
-            };
-            const easeFn = easings[easing] || easings.easeOutQuad;
-            
-            // Cria e armazena a animação
-            const animation = {
-                update: (currentTime) => {
-                    const elapsed = currentTime - startTime;
-                    const progress = Math.min(elapsed / duration, 1);
-                    const easedProgress = easeFn(progress);
-                    
-                    // Atualiza cada propriedade
-                    for (const key in properties) {
-                        target[key] = startValues[key] + 
-                                    (properties[key] - startValues[key]) * easedProgress;
-                    }
-                    
-                    // Verifica se completou
-                    if (progress >= 1) {
-                        if (onComplete) onComplete();
-                        return false; // Remove animação
-                    }
-                    return true; // Continua animação
-                }
-            };
-            
-            activeAnimations.push(animation);
-            return animation;
-        }
-
-        // 7. Carregamento do modelo
+        // 5. Carregamento do modelo
         loader.load(
-            './modelo.glb',
+            './modelo-compressed.glb',
             (gltf) => {
-                model = gltf.scene;
-                scene.add(model);
                 document.getElementById('loading').style.display = 'none';
+                scene.add(gltf.scene);
+                console.log('Modelo carregado com sucesso!');
                 
-                // Cache de elementos e materiais
-                model.traverse((child) => {
-                    if (child.isMesh) {
-                        elementCache[child.name || child.uuid] = child;
-                        originalMaterials[child.name || child.uuid] = child.material.clone();
-                    }
-                });
-                
-                // Notifica o Streamlit que o modelo está pronto
-                if (window.parent !== window) {
-                    window.parent.postMessage({
-                        type: 'model-ready',
-                        elements: Object.keys(elementCache).filter(Boolean)
-                    }, '*');
-                }
+                // Ajuste automático da câmera
+                const bbox = new THREE.Box3().setFromObject(gltf.scene);
+                const center = bbox.getCenter(new THREE.Vector3());
+                const size = bbox.getSize(new THREE.Vector3());
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const fov = camera.fov * (Math.PI / 180);
+                const cameraZ = Math.abs(maxDim / (2 * Math.tan(fov / 2)));
+                camera.position.z = cameraZ * 1.5;
+                controls.target.copy(center);
+                controls.update();
             },
             (xhr) => {
                 const percent = (xhr.loaded / xhr.total * 100).toFixed(2);
@@ -136,96 +80,22 @@
             (error) => {
                 console.error('Erro:', error);
                 document.getElementById('loading').innerHTML = `
-                    Erro ao carregar modelo:<br>
+                    Erro ao carregar:<br>
                     <small>${error.message}</small>
+                    <button onclick="window.location.reload()">Tentar novamente</button>
                 `;
             }
         );
 
-        // 8. Funções de interação
-        function focusOnElement(elementName, zoomLevel = 1.0) {
-            if (!model || !elementCache[elementName]) return;
-            
-            lastZoom = zoomLevel;
-            const element = elementCache[elementName];
-            const box = new THREE.Box3().setFromObject(element);
-            const center = box.getCenter(new THREE.Vector3());
-            const size = box.getSize(new THREE.Vector3());
-            const maxDim = Math.max(size.x, size.y, size.z);
-            const fov = camera.fov * (Math.PI / 180);
-            const cameraZ = Math.abs(maxDim / (2 * Math.tan(fov / 2))) * zoomLevel;
-            
-            // Restaura materiais originais
-            model.traverse((child) => {
-                if (child.isMesh && originalMaterials[child.name || child.uuid]) {
-                    child.material = originalMaterials[child.name || child.uuid].clone();
-                }
-            });
-            
-            // Destaque o elemento selecionado
-            element.material.color.setHex(0xFFA500);
-            
-            // Animação suave da câmera
-            animateTo(camera.position, { 
-                x: center.x * 1.2, 
-                y: center.y * 1.2, 
-                z: center.z + cameraZ 
-            }, 800);
-            
-            // Animação suave do alvo dos controles
-            animateTo(controls.target, center, 800);
-        }
-
-        function resetView() {
-            animateTo(camera.position, { x: 0, y: 0, z: 5 * lastZoom }, 800);
-            animateTo(controls.target, { x: 0, y: 0, z: 0 }, 800);
-            
-            // Restaura todos os materiais
-            model.traverse((child) => {
-                if (child.isMesh && originalMaterials[child.name || child.uuid]) {
-                    child.material = originalMaterials[child.name || child.uuid].clone();
-                }
-            });
-        }
-
-        // 9. Comunicação com Streamlit
-        window.addEventListener('message', (event) => {
-            try {
-                const data = event.data;
-                
-                switch(data.type) {
-                    case 'select-element':
-                        focusOnElement(data.elementName, data.zoom || 1.0);
-                        break;
-                        
-                    case 'reset-view':
-                        resetView();
-                        break;
-                        
-                    case 'set-zoom':
-                        lastZoom = data.value;
-                        camera.position.z = 5 * data.value;
-                        break;
-                }
-            } catch (error) {
-                console.error('Erro no processamento:', error);
-            }
-        });
-
-        // 10. Loop de animação principal
+        // 6. Animação
         function animate() {
             requestAnimationFrame(animate);
-            
-            // Atualiza animações personalizadas
-            activeAnimations = activeAnimations.filter(anim => {
-                return anim.update(performance.now());
-            });
-            
             controls.update();
             renderer.render(scene, camera);
         }
         animate();
 
+        // 7. Redimensionamento
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
