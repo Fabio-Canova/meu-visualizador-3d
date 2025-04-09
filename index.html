@@ -105,23 +105,14 @@
         });
 
 
-
-
-
-
-
-        let lastZoom = 1.0;
+        // Armazenar referência do modelo
+        let model;
         
-        // Função melhorada para focar elementos
-        function focusOnElement(elementName, zoomLevel = 1.0) {
-            if (!model) return;
-            
-            lastZoom = zoomLevel;
-            
+        // Função para focar em um elemento
+        function focusOnElement(elementName, zoomLevel = 1) {
             const box = new THREE.Box3();
             let elementFound = false;
             
-            // Otimização: cache de elementos
             model.traverse((child) => {
                 if (child.name === elementName && child.isMesh) {
                     box.expandByObject(child);
@@ -130,71 +121,68 @@
             });
         
             if (elementFound) {
-                // Animação suave
+                // Destacar elemento
+                model.traverse((child) => {
+                    if (child.name === elementName && child.isMesh) {
+                        child.material.color.setHex(0xFFA500); // Laranja
+                    } else if (child.isMesh) {
+                        child.material.color.setHex(0xFFFFFF); // Branco
+                    }
+                });
+        
+                // Calcular posição da câmera
                 const center = box.getCenter(new THREE.Vector3());
                 const size = box.getSize(new THREE.Vector3());
                 const maxDim = Math.max(size.x, size.y, size.z);
                 const fov = camera.fov * (Math.PI / 180);
-                const cameraZ = Math.abs(maxDim / (2 * Math.tan(fov / 2))) * zoomLevel;
+                let cameraZ = Math.abs(maxDim / (2 * Math.tan(fov / 2))) * zoomLevel;
         
+                // Animação suave
                 new TWEEN.Tween(camera.position)
                     .to({ 
-                        x: center.x * 1.5, 
-                        y: center.y * 1.5, 
+                        x: center.x, 
+                        y: center.y, 
                         z: center.z + cameraZ 
-                    }, 800)
+                    }, 500)
                     .easing(TWEEN.Easing.Quadratic.Out)
                     .start();
         
-                new TWEEN.Tween(controls.target)
-                    .to(center, 800)
-                    .easing(TWEEN.Easing.Quadratic.Out)
-                    .start();
-                
-                // Destaque visual
-                model.traverse((child) => {
-                    if (child.isMesh) {
-                        child.material.color.setHex(
-                            child.name === elementName ? 0xFFA500 : 0xFFFFFF
-                        );
-                    }
-                });
+                controls.target.copy(center);
             }
         }
         
-        // Sistema de mensagens robusto
+        // Resetar visualização
+        function resetView() {
+            camera.position.z = 5;
+            controls.reset();
+            model.traverse((child) => {
+                if (child.isMesh) {
+                    child.material.color.setHex(0xFFFFFF); // Resetar cores
+                }
+            });
+        }
+        
+        // Comunicação com Streamlit
         window.addEventListener('message', (event) => {
             if (event.origin !== "https://your-streamlit-app.streamlit.app") return;
             
-            try {
-                const data = event.data;
-                console.log("Comando recebido:", data);
-                
-                switch(data.type) {
-                    case 'select-element':
-                        focusOnElement(data.elementName, data.zoom);
-                        break;
-                        
-                    case 'set-zoom':
-                        camera.position.z = data.value * 5;
-                        break;
-                        
-                    case 'reset-view':
-                        resetView();
-                        break;
-                }
-            } catch (error) {
-                console.error("Erro no processamento:", error);
+            switch(event.data.type) {
+                case 'select-element':
+                    focusOnElement(event.data.elementName, event.data.zoom);
+                    break;
+                    
+                case 'reset-view':
+                    resetView();
+                    break;
             }
         });
         
-        // Atualize sua função animate() para incluir TWEEN.update()
-        function animate() {
-            requestAnimationFrame(animate);
-            TWEEN.update();
-            controls.update();
-            renderer.render(scene, camera);
-        }
+        // Adicione no seu loader.load():
+        loader.load('modelo.glb', (gltf) => {
+            model = gltf.scene; // Armazena a referência
+            // ... resto do seu código
+        });
+
 
 
         
