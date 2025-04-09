@@ -54,9 +54,9 @@
         dracoLoader.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
         loader.setDRACOLoader(dracoLoader);
 
-        // 5. Carregamento do modelo
+        // 5. Carregamento do 
         loader.load(
-            './modelo-compressed.glb',
+            './modelo.glb',
             (gltf) => {
                 document.getElementById('loading').style.display = 'none';
                 scene.add(gltf.scene);
