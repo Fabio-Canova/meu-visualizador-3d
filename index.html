@@ -27,8 +27,6 @@
     <!-- ATENÇÃO: Novo caminho para DracoLoader -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/DRACOLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
-    <!-- Adicione no <head> -->
-    <script src="https://cdn.jsdelivr.net/npm/tween.js@18.5.0/dist/tween.umd.js"></script>
 
     <script>
         // 1. Configuração inicial
@@ -102,85 +100,6 @@
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-
-        // Armazenar referência do modelo
-        let model;
-        
-        // Função para focar em um elemento
-        function focusOnElement(elementName, zoomLevel = 1) {
-            const box = new THREE.Box3();
-            let elementFound = false;
-            
-            model.traverse((child) => {
-                if (child.name === elementName && child.isMesh) {
-                    box.expandByObject(child);
-                    elementFound = true;
-                }
-            });
-        
-            if (elementFound) {
-                // Destacar elemento
-                model.traverse((child) => {
-                    if (child.name === elementName && child.isMesh) {
-                        child.material.color.setHex(0xFFA500); // Laranja
-                    } else if (child.isMesh) {
-                        child.material.color.setHex(0xFFFFFF); // Branco
-                    }
-                });
-        
-                // Calcular posição da câmera
-                const center = box.getCenter(new THREE.Vector3());
-                const size = box.getSize(new THREE.Vector3());
-                const maxDim = Math.max(size.x, size.y, size.z);
-                const fov = camera.fov * (Math.PI / 180);
-                let cameraZ = Math.abs(maxDim / (2 * Math.tan(fov / 2))) * zoomLevel;
-        
-                // Animação suave
-                new TWEEN.Tween(camera.position)
-                    .to({ 
-                        x: center.x, 
-                        y: center.y, 
-                        z: center.z + cameraZ 
-                    }, 500)
-                    .easing(TWEEN.Easing.Quadratic.Out)
-                    .start();
-        
-                controls.target.copy(center);
-            }
-        }
-        
-        // Resetar visualização
-        function resetView() {
-            camera.position.z = 5;
-            controls.reset();
-            model.traverse((child) => {
-                if (child.isMesh) {
-                    child.material.color.setHex(0xFFFFFF); // Resetar cores
-                }
-            });
-        }
-        
-        // Comunicação com Streamlit
-        window.addEventListener('message', (event) => {
-            if (event.origin !== "https://your-streamlit-app.streamlit.app") return;
-            
-            switch(event.data.type) {
-                case 'select-element':
-                    focusOnElement(event.data.elementName, event.data.zoom);
-                    break;
-                    
-                case 'reset-view':
-                    resetView();
-                    break;
-            }
-        });
-        
-        // Adicione no seu loader.load():
-        loader.load('modelo.glb', (gltf) => {
-            model = gltf.scene; // Armazena a referência
-            // ... resto do seu código
         });
 
 
