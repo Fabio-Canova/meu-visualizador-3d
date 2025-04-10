@@ -1,5 +1,4 @@
 
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -9,14 +8,19 @@
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
     </style>
+    <!-- Carregue todas as dependências corretamente -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tween.js@18.6.4/dist/tween.umd.js"></script>
+    <!-- Tween.js com UMD para garantir compatibilidade -->
+    <script src="https://cdn.jsdelivr.net/npm/@tweenjs/tween.js@18.6.4/dist/tween.umd.min.js"></script>
+    <!-- DRACOLoader para modelos comprimidos -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/draco_encoder.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/draco_decoder.js"></script>
 </head>
 <body>
     <script>
-        // Cena, câmera e renderizador
+        // 1. INICIALIZAÇÃO BÁSICA
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xf0f0f0);
         
@@ -28,111 +32,90 @@
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
         
-        // Controles de órbita
+        // 2. CONFIGURAÇÃO DO LOADER COM DRACO
+        const loader = new THREE.GLTFLoader();
+        const dracoLoader = new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/');
+        loader.setDRACOLoader(dracoLoader);
+
+        // 3. CONTROLES E ILUMINAÇÃO
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
         
-        // Luzes
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
         scene.add(ambientLight);
         
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
         directionalLight.position.set(5, 10, 7);
         scene.add(directionalLight);
-        
-        // Variáveis globais
+
+        // 4. VARIÁVEIS GLOBAIS
         let modelLoaded = false;
         window.availableObjects = [];
-        
-        // Carregador GLTF
-        const loader = new THREE.GLTFLoader();
-        
+
+        // 5. CARREGAMENTO DO MODELO
         loader.load(
-            'modelo.glb', // Substitua pelo caminho correto do seu modelo
+            'modelo.glb', // Certifique-se que este caminho está correto
             function (gltf) {
                 // Processa todos os objetos do modelo
-                processModel(gltf.scene);
-                
-                // Adiciona o modelo à cena
+                let counter = 0;
+                gltf.scene.traverse(function (child) {
+                    if (child.isMesh) {
+                        if (!child.name || child.name === '') {
+                            child.name = 'object_' + counter++;
+                        }
+                        window.availableObjects.push(child.name);
+                        
+                        // Configuração de material padrão
+                        child.material = new THREE.MeshStandardMaterial({
+                            color: 0xaaaaaa,
+                            metalness: 0.1,
+                            roughness: 0.5
+                        });
+                    }
+                });
+
                 scene.add(gltf.scene);
                 modelLoaded = true;
+                console.log('Modelo carregado com sucesso! Objetos:', window.availableObjects);
                 
                 // Ajusta a câmera para visualizar todo o modelo
                 fitCameraToObject(camera, controls, gltf.scene, 1.5);
-                
-                console.log('Modelo carregado com sucesso!');
-                console.log('Objetos disponíveis:', window.availableObjects);
             },
             undefined,
             function (error) {
                 console.error('Erro ao carregar modelo:', error);
             }
         );
-        
-        // Função para processar o modelo e extrair objetos
-        function processModel(model) {
-            let counter = 0;
-            
-            model.traverse(function (child) {
-                if (child.isMesh) {
-                    // Garante que cada objeto tenha um nome único
-                    if (!child.name || child.name === '') {
-                        child.name = 'object_' + counter++;
-                    }
-                    
-                    // Adiciona à lista de objetos disponíveis
-                    if (!window.availableObjects.includes(child.name)) {
-                        window.availableObjects.push(child.name);
-                    }
-                    
-                    // Configuração básica de material para melhor visualização
-                    child.material = new THREE.MeshStandardMaterial({
-                        color: 0xaaaaaa,
-                        metalness: 0.1,
-                        roughness: 0.5,
-                        side: THREE.DoubleSide
-                    });
-                    
-                    // Habilita sombras
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                }
-            });
-        }
-        
-        // Função para focar em um objeto específico
+
+        // 6. FUNÇÃO PARA FOCAR EM OBJETOS
         function focusOnObject(objectName) {
             if (!modelLoaded) {
                 console.warn('Modelo ainda não carregado');
                 return false;
             }
-            
+
             let objectFound = false;
             scene.traverse(function (child) {
                 if (child.isMesh && child.name === objectName) {
                     objectFound = true;
-                    console.log('Focando no objeto:', child.name);
                     
-                    // Calcula a bounding box do objeto
                     const bbox = new THREE.Box3().setFromObject(child);
                     const center = bbox.getCenter(new THREE.Vector3());
                     const size = bbox.getSize(new THREE.Vector3());
                     
-                    // Calcula a distância ideal para a câmera
                     const maxDim = Math.max(size.x, size.y, size.z);
                     const fov = camera.fov * (Math.PI / 180);
-                    let cameraDistance = maxDim / (2 * Math.tan(fov / 2));
-                    cameraDistance *= 1.5; // Ajuste de margem
+                    let cameraDistance = maxDim / (2 * Math.tan(fov / 2)) * 1.5;
                     
-                    // Posição alvo da câmera
                     const targetPosition = new THREE.Vector3(
                         center.x,
                         center.y + size.y * 0.2,
                         center.z + cameraDistance
                     );
                     
-                    // Animação com Tween.js
+                    // ANIMAÇÃO COM TWEEN (agora devidamente carregado)
                     new TWEEN.Tween(camera.position)
                         .to(targetPosition, 1000)
                         .easing(TWEEN.Easing.Quadratic.Out)
@@ -142,95 +125,58 @@
                         .to(center, 1000)
                         .easing(TWEEN.Easing.Quadratic.Out)
                         .start();
-                    
-                    // Destaque visual (opcional)
-                    child.material.emissive = new THREE.Color(0x888888);
-                    child.material.needsUpdate = true;
-                    
-                    setTimeout(() => {
-                        child.material.emissive = new THREE.Color(0x000000);
-                        child.material.needsUpdate = true;
-                    }, 2000);
                 }
             });
             
-            if (!objectFound) {
-                console.warn('Objeto não encontrado:', objectName);
-                console.log('Objetos disponíveis:', window.availableObjects);
-            }
-            
             return objectFound;
         }
-        
-        // Função para ajustar a câmera para visualizar todo o objeto
+
+        // 7. FUNÇÃO AUXILIAR PARA AJUSTE DE CÂMERA
         function fitCameraToObject(camera, controls, object, offset = 1.5) {
             const bbox = new THREE.Box3().setFromObject(object);
             const center = bbox.getCenter(new THREE.Vector3());
             const size = bbox.getSize(new THREE.Vector3());
             
-            // Calcula a distância ideal
             const maxDim = Math.max(size.x, size.y, size.z);
             const fov = camera.fov * (Math.PI / 180);
-            let cameraDistance = maxDim / (2 * Math.tan(fov / 2));
+            let cameraDistance = maxDim / (2 * Math.tan(fov / 2)) * offset;
             
-            // Aplica o offset
-            cameraDistance *= offset;
-            
-            // Posiciona a câmera
             camera.position.copy(center);
             camera.position.z += cameraDistance;
             controls.target.copy(center);
             controls.update();
         }
-        
-        // Listener para mensagens do Streamlit
+
+        // 8. COMUNICAÇÃO COM STREAMLIT
         window.addEventListener('message', function(event) {
             if (event.origin !== "https://fabio-canova.github.io") return;
             
-            console.log('Mensagem recebida:', event.data);
-            
             if (event.data.type === 'select-element' && event.data.elementName) {
                 const success = focusOnObject(event.data.elementName);
-                
-                // Resposta para o Streamlit
-                if (event.source) {
-                    event.source.postMessage({
-                        type: 'selection-response',
-                        elementName: event.data.elementName,
-                        success: success,
-                        availableObjects: window.availableObjects
-                    }, event.origin);
-                }
+                event.source.postMessage({
+                    type: 'selection-response',
+                    elementName: event.data.elementName,
+                    success: success,
+                    availableObjects: window.availableObjects
+                }, event.origin);
             }
         });
-        
-        // Animação
+
+        // 9. ANIMAÇÃO PRINCIPAL
         function animate() {
             requestAnimationFrame(animate);
-            TWEEN.update();
+            TWEEN.update(); // Agora TWEEN está definido corretamente
             controls.update();
             renderer.render(scene, camera);
         }
-        
         animate();
-        
-        // Redimensionamento
+
+        // 10. REDIMENSIONAMENTO
         window.addEventListener('resize', function() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-        
-        // Debug: Exibe a hierarquia da cena
-        function printSceneGraph() {
-            console.log('Hierarquia da cena:');
-            scene.traverse(function(child) {
-                console.log(`- ${child.name} (${child.type})`);
-            });
-        }
-        
-        // Exibe a hierarquia após 5 segundos (para debug)
-        setTimeout(printSceneGraph, 5000);
     </script>
 </body>
 </html>
