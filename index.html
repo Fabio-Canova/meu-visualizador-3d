@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -8,174 +9,113 @@
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
     </style>
-    <!-- Carregue todas as dependências corretamente -->
+    
+    <!-- 1. CARREGAMENTO CORRETO DAS DEPENDÊNCIAS -->
+    <!-- Three.js -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    
+    <!-- GLTFLoader + DRACOLoader -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.min.js"></script>
-    <!-- Tween.js com UMD para garantir compatibilidade -->
-    <script src="https://cdn.jsdelivr.net/npm/@tweenjs/tween.js@18.6.4/dist/tween.umd.min.js"></script>
-    <!-- DRACOLoader para modelos comprimidos -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/draco_encoder.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/draco_decoder.js"></script>
+    
+    <!-- OrbitControls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.min.js"></script>
+    
+    <!-- Tween.js - VERSÃO CORRETA UMD -->
+    <script src="https://cdn.jsdelivr.net/npm/@tweenjs/tween.js@18.6.4/dist/tween.umd.min.js"></script>
 </head>
 <body>
     <script>
-        // 1. INICIALIZAÇÃO BÁSICA
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xf0f0f0);
-        
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(5, 5, 5);
-        
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        document.body.appendChild(renderer.domElement);
-        
-        // 2. CONFIGURAÇÃO DO LOADER COM DRACO
-        const loader = new THREE.GLTFLoader();
+        // 2. INICIALIZAÇÃO DO DRACOLoader ANTES DO GLTFLoader
         const dracoLoader = new THREE.DRACOLoader();
         dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/');
+        
+        const loader = new THREE.GLTFLoader();
         loader.setDRACOLoader(dracoLoader);
 
-        // 3. CONTROLES E ILUMINAÇÃO
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
+        // 3. CONFIGURAÇÃO DA CENA
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-        scene.add(ambientLight);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
         
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        directionalLight.position.set(5, 10, 7);
-        scene.add(directionalLight);
+        // 4. DECLARAÇÃO GLOBAL DO TWEEN
+        // Acessa TWEEN do objeto global (window) conforme a versão UMD
+        const TWEEN = window.TWEEN;
+        
+        // 5. VERIFICAÇÃO DE CARREGAMENTO DAS DEPENDÊNCIAS
+        if (typeof TWEEN === 'undefined') {
+            console.error('TWEEN não foi carregado corretamente!');
+        }
+        
+        if (typeof THREE.DRACOLoader === 'undefined') {
+            console.error('DRACOLoader não foi carregado corretamente!');
+        }
 
-        // 4. VARIÁVEIS GLOBAIS
-        let modelLoaded = false;
-        window.availableObjects = [];
-
-        // 5. CARREGAMENTO DO MODELO
+        // 6. CARREGAMENTO DO MODELO COM TRATAMENTO DE ERROS
         loader.load(
-            'modelo.glb', // Certifique-se que este caminho está correto
-            function (gltf) {
-                // Processa todos os objetos do modelo
-                let counter = 0;
-                gltf.scene.traverse(function (child) {
+            'modelo.glb',
+            function(gltf) {
+                console.log('Modelo carregado com sucesso!');
+                
+                // Processamento dos objetos
+                gltf.scene.traverse(function(child) {
                     if (child.isMesh) {
-                        if (!child.name || child.name === '') {
-                            child.name = 'object_' + counter++;
-                        }
-                        window.availableObjects.push(child.name);
-                        
-                        // Configuração de material padrão
-                        child.material = new THREE.MeshStandardMaterial({
-                            color: 0xaaaaaa,
-                            metalness: 0.1,
-                            roughness: 0.5
-                        });
+                        console.log('Objeto encontrado:', child.name);
                     }
                 });
-
-                scene.add(gltf.scene);
-                modelLoaded = true;
-                console.log('Modelo carregado com sucesso! Objetos:', window.availableObjects);
                 
-                // Ajusta a câmera para visualizar todo o modelo
-                fitCameraToObject(camera, controls, gltf.scene, 1.5);
+                scene.add(gltf.scene);
             },
             undefined,
-            function (error) {
+            function(error) {
                 console.error('Erro ao carregar modelo:', error);
+                if (error.message.includes('DRACOLoader')) {
+                    console.error('Solução: Verifique se o DRACOLoader foi configurado corretamente');
+                }
             }
         );
 
-        // 6. FUNÇÃO PARA FOCAR EM OBJETOS
-        function focusOnObject(objectName) {
-            if (!modelLoaded) {
-                console.warn('Modelo ainda não carregado');
-                return false;
-            }
-
-            let objectFound = false;
-            scene.traverse(function (child) {
-                if (child.isMesh && child.name === objectName) {
-                    objectFound = true;
-                    
-                    const bbox = new THREE.Box3().setFromObject(child);
-                    const center = bbox.getCenter(new THREE.Vector3());
-                    const size = bbox.getSize(new THREE.Vector3());
-                    
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    const fov = camera.fov * (Math.PI / 180);
-                    let cameraDistance = maxDim / (2 * Math.tan(fov / 2)) * 1.5;
-                    
-                    const targetPosition = new THREE.Vector3(
-                        center.x,
-                        center.y + size.y * 0.2,
-                        center.z + cameraDistance
-                    );
-                    
-                    // ANIMAÇÃO COM TWEEN (agora devidamente carregado)
-                    new TWEEN.Tween(camera.position)
-                        .to(targetPosition, 1000)
-                        .easing(TWEEN.Easing.Quadratic.Out)
-                        .start();
-                    
-                    new TWEEN.Tween(controls.target)
-                        .to(center, 1000)
-                        .easing(TWEEN.Easing.Quadratic.Out)
-                        .start();
-                }
-            });
-            
-            return objectFound;
-        }
-
-        // 7. FUNÇÃO AUXILIAR PARA AJUSTE DE CÂMERA
-        function fitCameraToObject(camera, controls, object, offset = 1.5) {
-            const bbox = new THREE.Box3().setFromObject(object);
-            const center = bbox.getCenter(new THREE.Vector3());
-            const size = bbox.getSize(new THREE.Vector3());
-            
-            const maxDim = Math.max(size.x, size.y, size.z);
-            const fov = camera.fov * (Math.PI / 180);
-            let cameraDistance = maxDim / (2 * Math.tan(fov / 2)) * offset;
-            
-            camera.position.copy(center);
-            camera.position.z += cameraDistance;
-            controls.target.copy(center);
-            controls.update();
-        }
-
-        // 8. COMUNICAÇÃO COM STREAMLIT
-        window.addEventListener('message', function(event) {
-            if (event.origin !== "https://fabio-canova.github.io") return;
-            
-            if (event.data.type === 'select-element' && event.data.elementName) {
-                const success = focusOnObject(event.data.elementName);
-                event.source.postMessage({
-                    type: 'selection-response',
-                    elementName: event.data.elementName,
-                    success: success,
-                    availableObjects: window.availableObjects
-                }, event.origin);
-            }
-        });
-
-        // 9. ANIMAÇÃO PRINCIPAL
+        // 7. ANIMAÇÃO COM VERIFICAÇÃO DE TWEEN
         function animate() {
             requestAnimationFrame(animate);
-            TWEEN.update(); // Agora TWEEN está definido corretamente
-            controls.update();
+            
+            // Verifica se TWEEN existe antes de usar
+            if (typeof TWEEN !== 'undefined') {
+                TWEEN.update();
+            } else {
+                console.warn('TWEEN não disponível');
+            }
+            
             renderer.render(scene, camera);
         }
         animate();
 
-        // 10. REDIMENSIONAMENTO
-        window.addEventListener('resize', function() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+        // 8. FUNÇÃO PARA FOCAR EM OBJETOS (COM TWEEN)
+        function focusOnObject(objectName) {
+            scene.traverse(function(child) {
+                if (child.name === objectName) {
+                    const bbox = new THREE.Box3().setFromObject(child);
+                    const center = bbox.getCenter(new THREE.Vector3());
+                    
+                    new TWEEN.Tween(camera.position)
+                        .to({
+                            x: center.x,
+                            y: center.y,
+                            z: center.z + 5
+                        }, 1000)
+                        .start();
+                }
+            });
+        }
+
+        // 9. COMUNICAÇÃO COM STREAMLIT
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'select-element') {
+                focusOnObject(event.data.elementName);
+            }
         });
     </script>
 </body>
