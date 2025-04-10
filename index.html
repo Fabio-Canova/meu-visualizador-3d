@@ -1,130 +1,135 @@
+
+
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <title>Visualizador 3D</title>
-    <style>
-        body { margin: 0; overflow: hidden; }
-        canvas { display: block; }
-    </style>
-    
-    <!-- 1. CARREGUE TODAS AS DEPENDÊNCIAS NA ORDEM CORRETA -->
-    <!-- Three.js principal -->
+    <style>body { margin: 0; } canvas { display: block; }</style>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    
-    <!-- DRACO loader (agora carregado antes do GLTFLoader) -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/gltf/draco_wasm_wrapper.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/draco_decoder.js"></script>
-    
-    <!-- GLTFLoader -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.min.js"></script>
-    
-    <!-- OrbitControls -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.min.js"></script>
-    
-    <!-- Tween.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tweenjs/tween.js@18.6.4/dist/tween.umd.min.js"></script>
 </head>
 <body>
     <script>
-        // 2. CONFIGURAÇÃO DO DRACOLoader CORRETAMENTE
-        // Primeiro verifique se DRACOLoader está disponível
-        if (typeof THREE.DRACOLoader === 'undefined') {
-            // Se não estiver, carregue dinamicamente
-            const dracoScript = document.createElement('script');
-            dracoScript.src = 'https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/DRACOLoader.min.js';
-            dracoScript.onload = initApp;
-            document.head.appendChild(dracoScript);
-        } else {
-            initApp();
-        }
+        // Configuração básica
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-        function initApp() {
-            // 3. AGORA SIM INICIALIZE O DRACOLoader
-            const dracoLoader = new THREE.DRACOLoader();
-            dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/');
-            
-            // 4. CONFIGURE O GLTFLoader
-            const loader = new THREE.GLTFLoader();
-            loader.setDRACOLoader(dracoLoader);
+        // Controles
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
 
-            // 5. CENA, CÂMERA E RENDERER
-            const scene = new THREE.Scene();
-            const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
-            
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
-            
-            // 6. CONTROLES E LUZES
-            const controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            
-            const light = new THREE.AmbientLight(0xffffff, 0.5);
-            scene.add(light);
-            
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(5, 10, 7);
-            scene.add(directionalLight);
+        // Luzes
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 10, 7);
+        scene.add(directionalLight);
 
-            // 7. CARREGUE O MODELO
-            loader.load(
-                'modelo.glb',
-                function(gltf) {
-                    console.log('Modelo carregado com sucesso!');
-                    scene.add(gltf.scene);
-                    
-                    // Lista todos os objetos no console
-                    gltf.scene.traverse(function(child) {
-                        if (child.isMesh) {
-                            console.log('Objeto:', child.name);
-                        }
-                    });
-                },
-                undefined,
-                function(error) {
-                    console.error('Erro ao carregar modelo:', error);
-                }
-            );
+        // Carregador GLTF
+        const loader = new THREE.GLTFLoader();
+        
+        // Variável para armazenar objetos
+        window.modelObjects = [];
 
-            // 8. ANIMAÇÃO
-            function animate() {
-                requestAnimationFrame(animate);
-                if (window.TWEEN) TWEEN.update();
-                controls.update();
-                renderer.render(scene, camera);
-            }
-            animate();
-
-            // 9. FUNÇÃO PARA FOCAR EM OBJETOS
-            window.focusOnObject = function(objectName) {
-                scene.traverse(function(child) {
-                    if (child.name === objectName) {
-                        const bbox = new THREE.Box3().setFromObject(child);
-                        const center = bbox.getCenter(new THREE.Vector3());
+        // Carregar modelo
+        loader.load(
+            'modelo.glb', // CERTIFIQUE-SE QUE ESTE É O MESMO ARQUIVO USADO NO STREAMLIT
+            function(gltf) {
+                console.log('Modelo carregado com sucesso!');
+                
+                // Processar todos os objetos
+                gltf.scene.traverse(function(child) {
+                    if (child.isMesh) {
+                        // Adiciona à lista global
+                        window.modelObjects.push(child);
                         
-                        new TWEEN.Tween(camera.position)
-                            .to({
-                                x: center.x,
-                                y: center.y,
-                                z: center.z + 5
-                            }, 1000)
-                            .start();
-                        
-                        new TWEEN.Tween(controls.target)
-                            .to(center, 1000)
-                            .start();
+                        // Log para debug
+                        console.log('Objeto carregado:', child.name, child);
                     }
                 });
-            };
 
-            // 10. COMUNICAÇÃO COM STREAMLIT
-            window.addEventListener('message', function(event) {
-                if (event.data.type === 'select-element') {
-                    focusOnObject(event.data.elementName);
+                scene.add(gltf.scene);
+                
+                // Ajustar câmera para ver todo o modelo
+                const bbox = new THREE.Box3().setFromObject(gltf.scene);
+                const center = bbox.getCenter(new THREE.Vector3());
+                const size = bbox.getSize(new THREE.Vector3());
+                const maxDim = Math.max(size.x, size.y, size.z);
+                camera.position.z = center.z + maxDim * 1.5;
+                controls.target.copy(center);
+                controls.update();
+            },
+            undefined,
+            function(error) {
+                console.error('Erro ao carregar modelo:', error);
+            }
+        );
+
+        // Função para focar em objeto
+        window.focusOnObject = function(objectName) {
+            let found = false;
+            window.modelObjects.forEach(obj => {
+                if (obj.name === objectName) {
+                    found = true;
+                    const bbox = new THREE.Box3().setFromObject(obj);
+                    const center = bbox.getCenter(new THREE.Vector3());
+                    
+                    new TWEEN.Tween(camera.position)
+                        .to({
+                            x: center.x,
+                            y: center.y,
+                            z: center.z + bbox.getSize(new THREE.Vector3()).length() * 1.5
+                        }, 1000)
+                        .start();
+                        
+                    new TWEEN.Tween(controls.target)
+                        .to(center, 1000)
+                        .start();
                 }
             });
+            
+            if (!found) {
+                console.warn('Objeto não encontrado:', objectName);
+                console.log('Objetos disponíveis:', window.modelObjects.map(o => o.name));
+            }
+        };
+
+        // Animação
+        function animate() {
+            requestAnimationFrame(animate);
+            TWEEN.update();
+            controls.update();
+            renderer.render(scene, camera);
         }
+        animate();
+
+        // Redimensionamento
+        window.addEventListener('resize', function() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Comunicação com Streamlit
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'select-element') {
+                focusOnObject(event.data.elementName);
+                
+                // Resposta para Streamlit
+                event.source.postMessage({
+                    type: 'selection-response',
+                    elementName: event.data.elementName,
+                    success: window.modelObjects.some(o => o.name === event.data.elementName),
+                    availableObjects: window.modelObjects.map(o => o.name)
+                }, event.origin);
+            }
+        });
     </script>
 </body>
 </html>
