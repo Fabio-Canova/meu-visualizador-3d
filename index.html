@@ -98,40 +98,51 @@
         animate();
 
         // 7. Redimensionamento
-        window.addEventListener('message', (event) => {
-            // Verifica a origem por segurança
-            if (event.origin !== "https://YOUR-STREAMLIT-APP-URL.streamlit.app" && 
-                event.origin !== "http://localhost:8501") {
-                return;
-            }
+        // Adicione isso ao seu visualizador 3D (meu-visualizador-3d)
+        console.log("Visualizador 3D carregado. Elementos disponíveis:");
+        console.log(scene.children);  // Mostra todos os objetos na cena
         
-            if (event.data.type === 'select-element' && event.data.elementName) {
-                const element = scene.getObjectByName(event.data.elementName);
+        // Listener para mensagens
+        window.addEventListener('message', (event) => {
+            console.log('Mensagem recebida no visualizador:', event.data);
+            
+            if (event.data.type === 'select-element') {
+                const elementName = event.data.elementName;
+                console.log(`Tentando focar no elemento: ${elementName}`);
+                
+                // Verifica se o elemento existe
+                const element = scene.getObjectByName(elementName);
                 if (element) {
-                    // Foca no elemento com animação suave
-                    const boundingBox = new THREE.Box3().setFromObject(element);
-                    const center = boundingBox.getCenter(new THREE.Vector3());
+                    console.log('Elemento encontrado:', element);
                     
+                    // Foco com animação
+                    const box = new THREE.Box3().setFromObject(element);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    
+                    console.log('Posição do elemento:', center);
+                    console.log('Tamanho do elemento:', size);
+                    
+                    // Animação da câmera
                     new TWEEN.Tween(camera.position)
                         .to({
                             x: center.x,
-                            y: center.y,
-                            z: center.z + boundingBox.getSize(new THREE.Vector3()).length() * 1.5
+                            y: center.y + size.y * 0.5,
+                            z: center.z + size.z * 2
                         }, 1000)
                         .easing(TWEEN.Easing.Quadratic.Out)
                         .start();
                     
                     new TWEEN.Tween(camera.rotation)
-                        .to({
-                            x: -0.2,  // Ajuste estes valores conforme necessário
-                            y: 0,
-                            z: 0
-                        }, 1000)
-                        .easing(TWEEN.Easing.Quadratic.Out)
+                        .to({ x: -0.2, y: 0, z: 0 }, 1000)
                         .start();
+                } else {
+                    console.warn('Elemento não encontrado:', elementName);
+                    console.log('Objetos disponíveis:', scene.children);
                 }
             }
         });
+
         
 
 
