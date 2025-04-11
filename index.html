@@ -1,203 +1,244 @@
+
+
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Visualizador 3D - Revit Elements</title>
+    <title>Visualizador 3D com Draco</title>
     <style>
-        body { margin: 0; font-family: Arial; }
-        #container { display: flex; }
-        #viewer { width: 70vw; height: 100vh; }
-        #panel { width: 30vw; padding: 20px; overflow-y: auto; background: #f5f5f5; }
-        .element-item { padding: 10px; margin: 5px; background: white; cursor: pointer; }
-        .element-item:hover { background: #e0e0e0; }
+        body { margin: 0; overflow: hidden; }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: Arial, sans-serif;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 20px;
+            border-radius: 5px;
+        }
     </style>
+    
+    <!-- Three.js principal -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    
+    <!-- DRACO Loader - IMPORTANTE: Carregar antes do GLTFLoader -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/gltf/draco_wasm_wrapper.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/draco_decoder.js"></script>
+    
+    <!-- GLTFLoader -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.min.js"></script>
+    
+    <!-- OrbitControls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.min.js"></script>
+    
+    <!-- Tween.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tweenjs/tween.js@18.6.4/dist/tween.umd.min.js"></script>
 </head>
 <body>
-    <div id="container">
-        <div id="viewer"></div>
-        <div id="panel">
-            <h2>Elementos Revit</h2>
-            <div id="elements-list"></div>
-        </div>
-    </div>
-
+    <div id="loading">Carregando modelo 3D...</div>
     <script>
-        // 1. CONFIGURAÇÃO BÁSICA
+        // 1. CONFIGURAÇÃO INICIAL
         const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x333333);
+        
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        camera.position.set(5, 5, 5);
+        
         const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(document.getElementById('viewer').clientWidth, document.getElementById('viewer').clientHeight);
-        document.getElementById('viewer').appendChild(renderer.domElement);
-
-        // 2. DADOS DOS ELEMENTOS REVIT
-        const revitElements = [];
-        const elementProperties = {};
-
-        // 3. FUNÇÃO PARA EXTRAIR METADADOS REVIT
-        function extractRevitMetadata(object) {
-            // Padrões comuns de exportação Revit para GLTF
-            const metadataPatterns = [
-                { pattern: /^(.*?) \[(.*?)\]$/, matches: ['familyType', 'elementId'] }, // Ex: "Wall [12345]"
-                { pattern: /^(.*?) : (.*?) : (.*?)$/, matches: ['category', 'family', 'type'] }, // Ex: "Walls : Basic Wall : Generic - 200mm"
-                { pattern: /^(.*?) - (.*?)$/, matches: ['family', 'type'] } // Ex: "Generic - 200mm"
-            ];
-
-            let metadata = {
-                name: object.name,
-                category: '',
-                family: '',
-                familyType: '',
-                elementId: '',
-                rawName: object.name
-            };
-
-            // Tenta extrair metadados dos padrões conhecidos
-            for (const pattern of metadataPatterns) {
-                const match = object.name.match(pattern.pattern);
-                if (match) {
-                    pattern.matches.forEach((prop, index) => {
-                        metadata[prop] = match[index + 1].trim();
-                    });
-                    break;
-                }
-            }
-
-            // Se não encontrou nos padrões, tenta extrair do userData
-            if (object.userData && object.userData.revit) {
-                metadata = { ...metadata, ...object.userData.revit };
-            }
-
-            return metadata;
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        
+        // 2. CONFIGURAÇÃO DO DRACOLOADER
+        // Primeiro verifica se DRACOLoader está disponível
+        if (typeof THREE.DRACOLoader === 'undefined') {
+            document.getElementById('loading').textContent = 'Erro: DRACOLoader não carregado. Recarregue a página.';
+            throw new Error('DRACOLoader não disponível');
         }
-
-        // 4. CARREGAMENTO DO MODELO
+        
+        // Configura o decodificador Draco
+        const dracoLoader = new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/');
+        dracoLoader.preload();
+        
+        // Configura o GLTFLoader com Draco
         const loader = new THREE.GLTFLoader();
+        loader.setDRACOLoader(dracoLoader);
+        
+        // 3. CONTROLES E ILUMINAÇÃO
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 10, 7);
+        scene.add(directionalLight);
+        
+        // 4. CARREGAMENTO DO MODELO
+        console.log('Iniciando carregamento do modelo...');
+        
         loader.load(
-            'modelo.glb',
+            'modelo.glb', // CERTIFIQUE-SE QUE ESTE É O CAMINHO CORRETO
             function(gltf) {
-                console.log('Modelo carregado! Analisando elementos Revit...');
+                console.log('Modelo carregado com sucesso!');
+                document.getElementById('loading').style.display = 'none';
                 
-                // Processa todos os objetos na cena
-                gltf.scene.traverse(function(child) {
-                    if (child.isMesh) {
-                        const revitData = extractRevitMetadata(child);
-                        revitElements.push(revitData);
-                        
-                        // Armazena referência do objeto
-                        elementProperties[child.name] = {
-                            threeObj: child,
-                            ...revitData
-                        };
-                    }
-                });
-
+                // Adiciona o modelo à cena
                 scene.add(gltf.scene);
-                console.log('Elementos Revit identificados:', revitElements);
                 
-                // Atualiza a lista na UI
-                updateElementsList();
+                // Processa os elementos Revit
+                processRevitElements(gltf.scene);
                 
                 // Ajusta a câmera
                 fitCameraToObject(gltf.scene);
             },
-            undefined,
+            function(xhr) {
+                // Progresso do carregamento
+                const percent = (xhr.loaded / xhr.total) * 100;
+                document.getElementById('loading').textContent = `Carregando modelo: ${Math.round(percent)}%`;
+            },
             function(error) {
                 console.error('Erro ao carregar modelo:', error);
+                document.getElementById('loading').textContent = 'Erro ao carregar modelo. Verifique o console.';
+                document.getElementById('loading').style.color = 'red';
             }
         );
-
-        // 5. FUNÇÃO PARA ATUALIZAR A LISTA DE ELEMENTOS
-        function updateElementsList(filter = '') {
-            const listContainer = document.getElementById('elements-list');
-            listContainer.innerHTML = '';
+        
+        // 5. PROCESSAMENTO DOS ELEMENTOS REVIT
+        function processRevitElements(scene) {
+            const revitElements = [];
             
-            // Agrupa elementos por categoria/family
-            const groupedElements = {};
-            revitElements.forEach(element => {
-                const groupKey = element.category || element.family || 'Outros';
-                if (!groupedElements[groupKey]) {
-                    groupedElements[groupKey] = [];
+            scene.traverse(function(child) {
+                if (child.isMesh) {
+                    const elementInfo = {
+                        name: child.name,
+                        userData: child.userData,
+                        revitData: extractRevitData(child)
+                    };
+                    revitElements.push(elementInfo);
+                    
+                    // Armazena referência para seleção
+                    window.revitElements = window.revitElements || {};
+                    window.revitElements[child.name] = child;
                 }
-                groupedElements[groupKey].push(element);
             });
             
-            // Cria a UI agrupada
-            for (const [group, elements] of Object.entries(groupedElements)) {
-                const groupElement = document.createElement('div');
-                groupElement.innerHTML = `<h3>${group}</h3>`;
-                listContainer.appendChild(groupElement);
+            console.log('Elementos Revit encontrados:', revitElements);
+            return revitElements;
+        }
+        
+        // 6. EXTRAÇÃO DE DADOS REVIT
+        function extractRevitData(object) {
+            // Padrões de nomeação do Revit
+            const namePatterns = [
+                // Formato: "Family Type [ElementID]"
+                { regex: /^(.*?)\s*\[([^\[\]]+)\]$/, groups: ['familyType', 'elementId'] },
                 
-                elements.forEach(element => {
-                    const item = document.createElement('div');
-                    item.className = 'element-item';
-                    item.innerHTML = `
-                        <strong>${element.familyType || element.name}</strong><br>
-                        <small>${element.family || ''} ${element.elementId ? `[${element.elementId}]` : ''}</small>
-                    `;
-                    
-                    item.addEventListener('click', () => {
-                        focusOnElement(element.name);
+                // Formato: "Category : Family : Type"
+                { regex: /^(.*?)\s*:\s*(.*?)\s*:\s*(.*?)$/, groups: ['category', 'family', 'type'] },
+                
+                // Formato: "Family - Type"
+                { regex: /^(.*?)\s*-\s*(.*?)$/, groups: ['family', 'type'] }
+            ];
+            
+            const data = {
+                rawName: object.name,
+                category: '',
+                family: '',
+                type: '',
+                elementId: ''
+            };
+            
+            // Tenta extrair dos padrões de nome
+            for (const pattern of namePatterns) {
+                const match = object.name.match(pattern.regex);
+                if (match) {
+                    pattern.groups.forEach((group, index) => {
+                        data[group] = match[index + 1].trim();
                     });
-                    
-                    listContainer.appendChild(item);
-                });
+                    break;
+                }
             }
-        }
-
-        // 6. FUNÇÃO PARA FOCAR EM ELEMENTO
-        function focusOnElement(elementName) {
-            if (elementProperties[elementName]) {
-                const element = elementProperties[elementName].threeObj;
-                const bbox = new THREE.Box3().setFromObject(element);
-                const center = bbox.getCenter(new THREE.Vector3());
-                const size = bbox.getSize(new THREE.Vector3());
-                
-                // Animação da câmera
-                new TWEEN.Tween(camera.position)
-                    .to({
-                        x: center.x,
-                        y: center.y + size.y * 0.5,
-                        z: center.z + size.z * 2
-                    }, 1000)
-                    .easing(TWEEN.Easing.Quadratic.Out)
-                    .start();
-                
-                // Destacar elemento
-                element.material.emissive.setHex(0x888888);
-                setTimeout(() => {
-                    element.material.emissive.setHex(0x000000);
-                }, 2000);
-                
-                console.log('Elemento selecionado:', elementProperties[elementName]);
+            
+            // Complementa com userData se disponível
+            if (object.userData && object.userData.revit) {
+                Object.assign(data, object.userData.revit);
             }
+            
+            return data;
         }
-
-        // 7. FUNÇÃO PARA AJUSTAR CÂMERA
+        
+        // 7. FUNÇÕES AUXILIARES
         function fitCameraToObject(object) {
             const bbox = new THREE.Box3().setFromObject(object);
             const center = bbox.getCenter(new THREE.Vector3());
             const size = bbox.getSize(new THREE.Vector3());
             const maxDim = Math.max(size.x, size.y, size.z);
             
-            camera.position.set(center.x, center.y, center.z + maxDim * 1.5);
-            camera.lookAt(center);
+            camera.position.set(
+                center.x,
+                center.y,
+                center.z + maxDim * 1.5
+            );
+            controls.target.copy(center);
+            controls.update();
         }
-
+        
         // 8. ANIMAÇÃO
         function animate() {
             requestAnimationFrame(animate);
             TWEEN.update();
+            controls.update();
             renderer.render(scene, camera);
         }
         animate();
-
-        // 9. COMUNICAÇÃO COM STREAMLIT
+        
+        // 9. REDIMENSIONAMENTO
+        window.addEventListener('resize', function() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // 10. COMUNICAÇÃO COM STREAMLIT
+        window.focusOnRevitElement = function(elementName) {
+            if (window.revitElements && window.revitElements[elementName]) {
+                const element = window.revitElements[elementName];
+                const bbox = new THREE.Box3().setFromObject(element);
+                const center = bbox.getCenter(new THREE.Vector3());
+                
+                new TWEEN.Tween(camera.position)
+                    .to({
+                        x: center.x,
+                        y: center.y,
+                        z: center.z + bbox.getSize(new THREE.Vector3()).length() * 1.5
+                    }, 1000)
+                    .start();
+                
+                controls.target.copy(center);
+                
+                // Destaque visual
+                element.material.emissive.setHex(0x888888);
+                setTimeout(() => {
+                    element.material.emissive.setHex(0x000000);
+                }, 2000);
+                
+                return true;
+            }
+            return false;
+        };
+        
         window.addEventListener('message', function(event) {
             if (event.data.type === 'select-element') {
-                focusOnElement(event.data.elementName);
+                const success = window.focusOnRevitElement(event.data.elementName);
+                event.source.postMessage({
+                    type: 'selection-response',
+                    elementName: event.data.elementName,
+                    success: success
+                }, event.origin);
             }
         });
     </script>
