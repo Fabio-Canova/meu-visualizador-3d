@@ -302,27 +302,12 @@
         }
         
         // 2. Função para encontrar elemento por ID
-        // 2. Função para encontrar elemento por ID - SUBSTITUIR
         window.findElementById = function(id) {
-            if (!id) return null;
-            
-            return window.revitElements.all.find(el => {
-                if (el.elementId === id) return true;
-                const idSuffix = new RegExp(`(?:^|_|\\s)${id}$`);
-                return idSuffix.test(el.name) || el.name.includes(id);
-            }) || null;
-        };
-        
-        // 2. Função para destacar elemento na lista
-        window.highlightElement = function(elementId) {
-            const items = document.querySelectorAll('.element-item');
-            items.forEach(item => {
-                item.classList.remove('highlighted');
-                if (item.dataset.elementId === elementId) {
-                    item.classList.add('highlighted');
-                    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            });
+            return window.revitElements.all.find(el => 
+                el.elementId === id || 
+                el.name.includes(`_${id}`) || 
+                el.name.includes(` ${id}`)
+            );
         };
         
         // 3. Função de extração de metadados completa
@@ -365,23 +350,17 @@
         
         // 5. Listener para comunicação com Streamlit
         window.addEventListener('message', function(event) {
-            if (event.origin !== "https://fabio-canova.github.io") return;
-            
-            if (event.data.type === 'focus-by-id') {
+            if (event.data.type === 'focus-element' && event.data.elementId) {
                 const element = window.findElementById(event.data.elementId);
-                const response = {
-                    type: 'focus-response',
-                    elementId: event.data.elementId,
-                    success: !!element,
-                    elementName: element?.name || ''
-                };
-                
                 if (element) {
                     focusOnElement(element);
-                    window.highlightElement(event.data.elementId);
+                    
+                    window.parent.postMessage({
+                        type: 'focus-completed',
+                        elementId: event.data.elementId,
+                        elementName: element.name
+                    }, event.origin);
                 }
-                
-                event.source.postMessage(response, event.origin);
             }
         });
 
