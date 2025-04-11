@@ -1,164 +1,286 @@
 
-
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Visualizador 3D com Draco</title>
+    <title>Visualizador 3D - Elementos Revit</title>
     <style>
         body { margin: 0; overflow: hidden; }
-        #loading {
+        #info {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-family: Arial, sans-serif;
-            color: white;
+            top: 10px;
+            left: 10px;
             background: rgba(0,0,0,0.7);
-            padding: 20px;
+            color: white;
+            padding: 10px;
+            font-family: Arial;
+            font-size: 14px;
             border-radius: 5px;
             z-index: 100;
         }
-        canvas { display: block; }
     </style>
-    
-    <!-- Three.js principal -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    
-    <!-- DRACO decoder -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/draco_decoder.js"></script>
-    
-    <!-- GLTFLoader -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.min.js"></script>
-    
-    <!-- DRACOLoader -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/DRACOLoader.min.js"></script>
-    
-    <!-- OrbitControls -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.min.js"></script>
-    
-    <!-- Tween.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tweenjs/tween.js@18.6.4/dist/tween.umd.min.js"></script>
 </head>
 <body>
-    <div id="loading">Inicializando visualizador 3D...</div>
+    <div id="info">Carregando modelo...</div>
     <script>
-        // 1. VERIFICAÇÃO DE DEPENDÊNCIAS
-        function checkDependencies() {
-            if (typeof THREE === 'undefined') {
-                console.error('THREE não está definido');
-                return false;
+        // 1. CONFIGURAÇÃO BÁSICA
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x333333);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // 2. CONTROLES E ILUMINAÇÃO
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 10, 7);
+        scene.add(directionalLight);
+
+        // 3. ESTRUTURA PARA ARMAZENAR ELEMENTOS REVIT
+        window.revitElements = {
+            all: [],
+            byId: {},
+            byFamily: {},
+            byCategory: {},
+            byType: {}
+        };
+
+        // 4. FUNÇÃO PARA EXTRAIR METADADOS REVIT
+        function extractRevitMetadata(object) {
+            // Verifica se já tem metadados no userData
+            if (object.userData && object.userData.revit) {
+                return object.userData.revit;
             }
-            if (typeof THREE.DRACOLoader === 'undefined') {
-                console.error('DRACOLoader não está definido');
-                return false;
+
+            // Padrões de nomenclatura do Revit
+            const patterns = [
+                // Formato: "Family Type [ElementID]"
+                { regex: /^(.*?)\s*\[([^\]]+)\]$/, props: ['familyType', 'elementId'] },
+                
+                // Formato: "Category:Family:Type"
+                { regex: /^(.*?):(.*?):(.*?)$/, props: ['category', 'family', 'type'] },
+                
+                // Formato: "Family - Type"
+                { regex: /^(.*?)\s*-\s*(.*?)$/, props: ['family', 'type'] }
+            ];
+
+            const metadata = {
+                name: object.name,
+                rawName: object.name,
+                category: '',
+                family: '',
+                type: '',
+                elementId: ''
+            };
+
+            // Tenta extrair dos padrões de nome
+            for (const pattern of patterns) {
+                const match = object.name.match(pattern.regex);
+                if (match) {
+                    pattern.props.forEach((prop, index) => {
+                        metadata[prop] = match[index + 1].trim();
+                    });
+                    break;
+                }
             }
-            if (typeof THREE.GLTFLoader === 'undefined') {
-                console.error('GLTFLoader não está definido');
-                return false;
-            }
-            return true;
+
+            return metadata;
         }
 
-        // 2. INICIALIZAÇÃO DO APLICATIVO
-        function initApp() {
-            if (!checkDependencies()) {
-                showError('Dependências não carregadas. Recarregue a página.');
-                return;
-            }
+        // 5. CARREGAMENTO DO MODELO
+        const loader = new THREE.GLTFLoader();
+        loader.load(
+            'modelo.glb',
+            function(gltf) {
+                document.getElementById('info').textContent = "Modelo carregado!";
+                console.log('Modelo carregado com sucesso!');
+                
+                // Processa todos os objetos
+                gltf.scene.traverse(function(child) {
+                    if (child.isMesh) {
+                        const revitData = extractRevitMetadata(child);
+                        
+                        // Armazena o objeto
+                        const element = {
+                            threeObj: child,
+                            ...revitData
+                        };
+                        
+                        // Adiciona às estruturas de organização
+                        window.revitElements.all.push(element);
+                        window.revitElements.byId[revitData.elementId || child.uuid] = element;
+                        
+                        if (revitData.family) {
+                            window.revitElements.byFamily[revitData.family] = 
+                                window.revitElements.byFamily[revitData.family] || [];
+                            window.revitElements.byFamily[revitData.family].push(element);
+                        }
+                        
+                        if (revitData.category) {
+                            window.revitElements.byCategory[revitData.category] = 
+                                window.revitElements.byCategory[revitData.category] || [];
+                            window.revitElements.byCategory[revitData.category].push(element);
+                        }
+                        
+                        if (revitData.type) {
+                            window.revitElements.byType[revitData.type] = 
+                                window.revitElements.byType[revitData.type] || [];
+                            window.revitElements.byType[revitData.type].push(element);
+                        }
+                        
+                        console.log('Elemento Revit:', element);
+                    }
+                });
 
-            // Configuração do DRACOLoader (versão compatível)
-            const dracoLoader = new THREE.DRACOLoader();
-            dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/');
-            
-            // Solução para versões sem suporte a Promise
-            if (typeof dracoLoader.preload === 'function') {
-                try {
-                    // Versões mais novas com suporte a preload()
-                    dracoLoader.preload();
-                    startApplication(dracoLoader);
-                } catch (error) {
-                    showError('Erro ao pré-carregar Draco: ' + error.message);
-                }
-            } else {
-                // Versões mais antigas - inicia imediatamente
-                document.getElementById('loading').textContent = 'Carregando decodificador Draco...';
-                setTimeout(() => {
-                    startApplication(dracoLoader);
-                }, 500); // Pequeno delay para garantir carregamento
-            }
-        }
-
-        // 3. APLICAÇÃO PRINCIPAL
-        function startApplication(dracoLoader) {
-            // Configuração básica
-            const scene = new THREE.Scene();
-            const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
-            
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
-            
-            // Configuração do loader com Draco
-            const loader = new THREE.GLTFLoader();
-            loader.setDRACOLoader(dracoLoader);
-            
-            // Carregamento do modelo
-            loader.load(
-                'modelo.glb',
-                function(gltf) {
-                    document.getElementById('loading').style.display = 'none';
-                    scene.add(gltf.scene);
-                    
-                    // Ajuste inicial da câmera
-                    const bbox = new THREE.Box3().setFromObject(gltf.scene);
-                    const center = bbox.getCenter(new THREE.Vector3());
-                    const size = bbox.getSize(new THREE.Vector3());
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    
-                    camera.position.set(
-                        center.x,
-                        center.y,
-                        center.z + maxDim * 1.5
-                    );
-                    camera.lookAt(center);
-                },
-                function(xhr) {
-                    const percent = Math.round((xhr.loaded / xhr.total) * 100);
-                    document.getElementById('loading').textContent = `Carregando modelo: ${percent}%`;
-                },
-                function(error) {
-                    showError('Erro ao carregar modelo: ' + error.message);
-                }
-            );
-            
-            // Controles e animação
-            const controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            
-            function animate() {
-                requestAnimationFrame(animate);
-                if (window.TWEEN) TWEEN.update();
+                scene.add(gltf.scene);
+                
+                // Ajusta a câmera
+                const bbox = new THREE.Box3().setFromObject(gltf.scene);
+                const center = bbox.getCenter(new THREE.Vector3());
+                const size = bbox.getSize(new THREE.Vector3());
+                const maxDim = Math.max(size.x, size.y, size.z);
+                
+                camera.position.set(center.x, center.y, center.z + maxDim * 1.5);
+                controls.target.copy(center);
                 controls.update();
-                renderer.render(scene, camera);
+                
+                // Atualiza o painel de informações
+                updateInfoPanel();
+            },
+            function(xhr) {
+                const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                document.getElementById('info').textContent = `Carregando: ${percent}%`;
+            },
+            function(error) {
+                document.getElementById('info').textContent = "Erro ao carregar modelo!";
+                console.error('Erro ao carregar modelo:', error);
             }
-            animate();
+        );
+
+        // 6. FUNÇÃO PARA FOCAR EM ELEMENTO
+        window.focusOnRevitElement = function(identifier) {
+            let element;
+            
+            // Tenta encontrar por ID, nome, family ou type
+            element = window.revitElements.byId[identifier] || 
+                     window.revitElements.all.find(e => e.name === identifier) ||
+                     window.revitElements.all.find(e => e.family === identifier) ||
+                     window.revitElements.all.find(e => e.type === identifier);
+            
+            if (element) {
+                const obj = element.threeObj;
+                const bbox = new THREE.Box3().setFromObject(obj);
+                const center = bbox.getCenter(new THREE.Vector3());
+                const size = bbox.getSize(new THREE.Vector3());
+                
+                // Animação da câmera
+                new TWEEN.Tween(camera.position)
+                    .to({
+                        x: center.x,
+                        y: center.y + size.y * 0.5,
+                        z: center.z + size.length() * 1.5
+                    }, 1000)
+                    .easing(TWEEN.Easing.Quadratic.Out)
+                    .start();
+                
+                // Animação do target
+                new TWEEN.Tween(controls.target)
+                    .to(center, 1000)
+                    .start();
+                
+                // Destaque visual temporário
+                obj.material.emissive.setHex(0x888888);
+                setTimeout(() => {
+                    obj.material.emissive.setHex(0x000000);
+                }, 2000);
+                
+                // Atualiza o painel de informações
+                updateInfoPanel(element);
+                
+                return true;
+            }
+            
+            console.warn('Elemento não encontrado:', identifier);
+            return false;
+        };
+
+        // 7. PAINEL DE INFORMAÇÕES
+        function updateInfoPanel(element = null) {
+            const infoDiv = document.getElementById('info');
+            
+            if (element) {
+                infoDiv.innerHTML = `
+                    <strong>${element.name}</strong><br>
+                    ${element.family ? `Family: ${element.family}<br>` : ''}
+                    ${element.type ? `Type: ${element.type}<br>` : ''}
+                    ${element.category ? `Category: ${element.category}<br>` : ''}
+                    ${element.elementId ? `ID: ${element.elementId}` : ''}
+                `;
+            } else {
+                const counts = {
+                    families: Object.keys(window.revitElements.byFamily).length,
+                    categories: Object.keys(window.revitElements.byCategory).length,
+                    elements: window.revitElements.all.length
+                };
+                
+                infoDiv.innerHTML = `
+                    Modelo carregado:<br>
+                    • ${counts.elements} elementos<br>
+                    • ${counts.families} families<br>
+                    • ${counts.categories} categorias
+                `;
+            }
         }
 
-        // 4. FUNÇÕES AUXILIARES
-        function showError(message) {
-            document.getElementById('loading').innerHTML = `
-                <div style="color: #ff6b6b;">
-                    <h3>Erro</h3>
-                    <p>${message}</p>
-                    <button onclick="window.location.reload()">Recarregar</button>
-                </div>
-            `;
-            console.error(message);
+        // 8. ANIMAÇÃO
+        function animate() {
+            requestAnimationFrame(animate);
+            TWEEN.update();
+            controls.update();
+            renderer.render(scene, camera);
         }
+        animate();
 
-        // Inicia a aplicação
-        initApp();
+        // 9. COMUNICAÇÃO COM STREAMLIT
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'select-element') {
+                const success = window.focusOnRevitElement(event.data.elementName);
+                
+                // Resposta para Streamlit
+                if (event.source) {
+                    event.source.postMessage({
+                        type: 'selection-response',
+                        elementName: event.data.elementName,
+                        success: success,
+                        availableElements: window.revitElements.all.map(e => ({
+                            name: e.name,
+                            family: e.family,
+                            type: e.type,
+                            category: e.category,
+                            id: e.elementId
+                        }))
+                    }, event.origin);
+                }
+            }
+        });
+
+        // 10. REDIMENSIONAMENTO
+        window.addEventListener('resize', function() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
