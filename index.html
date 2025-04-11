@@ -22,16 +22,16 @@
         canvas { display: block; }
     </style>
     
-    <!-- Three.js principal (versão fixa para garantir compatibilidade) -->
+    <!-- Three.js principal -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     
-    <!-- DRACO decoder (carregado explicitamente) -->
+    <!-- DRACO decoder -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/draco_decoder.js"></script>
     
     <!-- GLTFLoader -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.min.js"></script>
     
-    <!-- DRACOLoader (arquivo separado necessário) -->
+    <!-- DRACOLoader -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/DRACOLoader.min.js"></script>
     
     <!-- OrbitControls -->
@@ -45,198 +45,117 @@
     <script>
         // 1. VERIFICAÇÃO DE DEPENDÊNCIAS
         function checkDependencies() {
-            const required = [
-                'THREE',
-                'THREE.DRACOLoader',
-                'THREE.GLTFLoader',
-                'TWEEN'
-            ];
-            
-            let allLoaded = true;
-            
-            required.forEach(dep => {
-                try {
-                    if (eval(`typeof ${dep}`) === 'undefined') {
-                        console.error(`${dep} não carregado`);
-                        allLoaded = false;
-                    }
-                } catch (e) {
-                    console.error(`${dep} não disponível`);
-                    allLoaded = false;
-                }
-            });
-            
-            return allLoaded;
+            if (typeof THREE === 'undefined') {
+                console.error('THREE não está definido');
+                return false;
+            }
+            if (typeof THREE.DRACOLoader === 'undefined') {
+                console.error('DRACOLoader não está definido');
+                return false;
+            }
+            if (typeof THREE.GLTFLoader === 'undefined') {
+                console.error('GLTFLoader não está definido');
+                return false;
+            }
+            return true;
         }
 
         // 2. INICIALIZAÇÃO DO APLICATIVO
         function initApp() {
             if (!checkDependencies()) {
-                document.getElementById('loading').innerHTML = `
-                    <div style="color: #ff6b6b;">
-                        <h3>Erro ao carregar dependências</h3>
-                        <p>Recarregue a página ou verifique sua conexão.</p>
-                        <button onclick="window.location.reload()">Recarregar</button>
-                    </div>
-                `;
+                showError('Dependências não carregadas. Recarregue a página.');
                 return;
             }
 
-            document.getElementById('loading').textContent = 'Configurando DRACOLoader...';
-            
-            // Configuração do DRACOLoader
+            // Configuração do DRACOLoader (versão compatível)
             const dracoLoader = new THREE.DRACOLoader();
             dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/');
-            dracoLoader.preload().then(() => {
-                startApplication(dracoLoader);
-            }).catch(error => {
-                document.getElementById('loading').innerHTML = `
-                    <div style="color: #ff6b6b;">
-                        <h3>Erro no DRACOLoader</h3>
-                        <p>${error.message}</p>
-                        <button onclick="window.location.reload()">Tentar novamente</button>
-                    </div>
-                `;
-                console.error('Erro no DRACOLoader:', error);
-            });
+            
+            // Solução para versões sem suporte a Promise
+            if (typeof dracoLoader.preload === 'function') {
+                try {
+                    // Versões mais novas com suporte a preload()
+                    dracoLoader.preload();
+                    startApplication(dracoLoader);
+                } catch (error) {
+                    showError('Erro ao pré-carregar Draco: ' + error.message);
+                }
+            } else {
+                // Versões mais antigas - inicia imediatamente
+                document.getElementById('loading').textContent = 'Carregando decodificador Draco...';
+                setTimeout(() => {
+                    startApplication(dracoLoader);
+                }, 500); // Pequeno delay para garantir carregamento
+            }
         }
 
         // 3. APLICAÇÃO PRINCIPAL
         function startApplication(dracoLoader) {
-            document.getElementById('loading').textContent = 'Iniciando visualizador...';
-            
-            // Cena, câmera e renderer
+            // Configuração básica
             const scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x333333);
-            
             const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-            camera.position.set(5, 5, 5);
-            
             const renderer = new THREE.WebGLRenderer({ antialias: true });
+            
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
             
-            // Controles
-            const controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            
-            // Luzes
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
-            
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(5, 10, 7);
-            scene.add(directionalLight);
-            
-            // Configuração do GLTFLoader com Draco
+            // Configuração do loader com Draco
             const loader = new THREE.GLTFLoader();
             loader.setDRACOLoader(dracoLoader);
             
             // Carregamento do modelo
-            document.getElementById('loading').textContent = 'Carregando modelo 3D...';
-            
             loader.load(
-                'modelo.glb', // Verifique o caminho do seu modelo
+                'modelo.glb',
                 function(gltf) {
                     document.getElementById('loading').style.display = 'none';
-                    console.log('Modelo carregado com sucesso!');
-                    
                     scene.add(gltf.scene);
                     
-                    // Processamento dos elementos Revit
-                    processRevitElements(gltf.scene);
-                    
                     // Ajuste inicial da câmera
-                    fitCameraToObject(gltf.scene);
+                    const bbox = new THREE.Box3().setFromObject(gltf.scene);
+                    const center = bbox.getCenter(new THREE.Vector3());
+                    const size = bbox.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    
+                    camera.position.set(
+                        center.x,
+                        center.y,
+                        center.z + maxDim * 1.5
+                    );
+                    camera.lookAt(center);
                 },
                 function(xhr) {
                     const percent = Math.round((xhr.loaded / xhr.total) * 100);
                     document.getElementById('loading').textContent = `Carregando modelo: ${percent}%`;
                 },
                 function(error) {
-                    document.getElementById('loading').innerHTML = `
-                        <div style="color: #ff6b6b;">
-                            <h3>Erro ao carregar modelo</h3>
-                            <p>${error.message}</p>
-                            <button onclick="window.location.reload()">Tentar novamente</button>
-                        </div>
-                    `;
-                    console.error('Erro no carregamento:', error);
+                    showError('Erro ao carregar modelo: ' + error.message);
                 }
             );
             
-            // Animação
+            // Controles e animação
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            
             function animate() {
                 requestAnimationFrame(animate);
-                TWEEN.update();
+                if (window.TWEEN) TWEEN.update();
                 controls.update();
                 renderer.render(scene, camera);
             }
             animate();
-            
-            // Redimensionamento
-            window.addEventListener('resize', function() {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            });
         }
 
         // 4. FUNÇÕES AUXILIARES
-        function processRevitElements(scene) {
-            const revitElements = [];
-            
-            scene.traverse(function(child) {
-                if (child.isMesh) {
-                    revitElements.push({
-                        name: child.name,
-                        object: child,
-                        userData: child.userData
-                    });
-                }
-            });
-            
-            console.log('Elementos Revit encontrados:', revitElements);
-            window.revitElements = revitElements;
+        function showError(message) {
+            document.getElementById('loading').innerHTML = `
+                <div style="color: #ff6b6b;">
+                    <h3>Erro</h3>
+                    <p>${message}</p>
+                    <button onclick="window.location.reload()">Recarregar</button>
+                </div>
+            `;
+            console.error(message);
         }
-        
-        function fitCameraToObject(object) {
-            const bbox = new THREE.Box3().setFromObject(object);
-            const center = bbox.getCenter(new THREE.Vector3());
-            const size = bbox.getSize(new THREE.Vector3());
-            const maxDim = Math.max(size.x, size.y, size.z);
-            
-            camera.position.set(
-                center.x,
-                center.y,
-                center.z + maxDim * 1.5
-            );
-            controls.target.copy(center);
-            controls.update();
-        }
-        
-        // 5. COMUNICAÇÃO COM STREAMLIT
-        window.focusOnRevitElement = function(elementName) {
-            if (!window.revitElements) return false;
-            
-            const element = window.revitElements.find(e => e.name === elementName);
-            if (element) {
-                const bbox = new THREE.Box3().setFromObject(element.object);
-                const center = bbox.getCenter(new THREE.Vector3());
-                
-                new TWEEN.Tween(camera.position)
-                    .to({
-                        x: center.x,
-                        y: center.y,
-                        z: center.z + bbox.getSize(new THREE.Vector3()).length() * 1.5
-                    }, 1000)
-                    .start();
-                
-                controls.target.copy(center);
-                return true;
-            }
-            return false;
-        };
 
         // Inicia a aplicação
         initApp();
