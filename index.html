@@ -306,22 +306,23 @@
         window.findElementById = function(id) {
             if (!id) return null;
             
-            // Busca em diferentes padrões
-            const element = window.revitElements.all.find(el => {
-                // Caso 1: ID exato
+            return window.revitElements.all.find(el => {
                 if (el.elementId === id) return true;
-                
-                // Caso 2: ID no final do nome (após underscore ou espaço)
                 const idSuffix = new RegExp(`(?:^|_|\\s)${id}$`);
-                if (idSuffix.test(el.name)) return true;
-                
-                // Caso 3: ID em qualquer parte do nome
-                if (el.name.includes(id)) return true;
-                
-                return false;
+                return idSuffix.test(el.name) || el.name.includes(id);
+            }) || null;
+        };
+        
+        // 2. Função para destacar elemento na lista
+        window.highlightElement = function(elementId) {
+            const items = document.querySelectorAll('.element-item');
+            items.forEach(item => {
+                item.classList.remove('highlighted');
+                if (item.dataset.elementId === elementId) {
+                    item.classList.add('highlighted');
+                    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
             });
-            
-            return element || null;
         };
         
         // 3. Função de extração de metadados completa
@@ -364,42 +365,25 @@
         
         // 5. Listener para comunicação com Streamlit
         window.addEventListener('message', function(event) {
+            if (event.origin !== "https://fabio-canova.github.io") return;
+            
             if (event.data.type === 'focus-by-id') {
-                const elementId = event.data.elementId;
-                const element = window.findElementById(elementId);
-                
-                // Responde ao Streamlit
+                const element = window.findElementById(event.data.elementId);
                 const response = {
                     type: 'focus-response',
-                    elementId: elementId,
-                    success: false
+                    elementId: event.data.elementId,
+                    success: !!element,
+                    elementName: element?.name || ''
                 };
                 
                 if (element) {
                     focusOnElement(element);
-                    response.success = true;
-                    response.elementName = element.name;
-                    
-                    // Destacar na lista (se existir)
-                    if (window.highlightElement) {
-                        window.highlightElement(elementId);
-                    }
+                    window.highlightElement(event.data.elementId);
                 }
                 
                 event.source.postMessage(response, event.origin);
             }
         });
-        
-        // 3. Função para destacar elemento na lista - ADICIONAR (nova função)
-        window.highlightElement = function(elementId) {
-            const items = document.querySelectorAll('.element-item');
-            items.forEach(item => {
-                item.classList.remove('highlighted');
-                if (item.dataset.elementId === elementId) {
-                    item.classList.add('highlighted');
-                    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            });
 
 /* ====== FIM DO CÓDIGO CORRIGIDO ====== */
 
