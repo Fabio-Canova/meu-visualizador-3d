@@ -302,13 +302,28 @@
         }
         
         // 2. Função para encontrar elemento por ID
+        // 2. Função para encontrar elemento por ID - SUBSTITUIR
         window.findElementById = function(id) {
-            return window.revitElements.all.find(el => 
-                el.elementId === id || 
-                el.name.includes(`_${id}`) || 
-                el.name.includes(` ${id}`)
-            );
+            if (!id) return null;
+            
+            // Busca em diferentes padrões
+            const element = window.revitElements.all.find(el => {
+                // Caso 1: ID exato
+                if (el.elementId === id) return true;
+                
+                // Caso 2: ID no final do nome (após underscore ou espaço)
+                const idSuffix = new RegExp(`(?:^|_|\\s)${id}$`);
+                if (idSuffix.test(el.name)) return true;
+                
+                // Caso 3: ID em qualquer parte do nome
+                if (el.name.includes(id)) return true;
+                
+                return false;
+            });
+            
+            return element || null;
         };
+
         
         // 3. Função de extração de metadados completa
         function extractRevitData(object) {
@@ -349,20 +364,45 @@
         }
         
         // 5. Listener para comunicação com Streamlit
+        // 5. Listener para comunicação com Streamlit - SUBSTITUIR
         window.addEventListener('message', function(event) {
-            if (event.data.type === 'focus-element' && event.data.elementId) {
-                const element = window.findElementById(event.data.elementId);
+            if (event.data.type === 'focus-by-id') {
+                const elementId = event.data.elementId;
+                const element = window.findElementById(elementId);
+                
+                // Responde ao Streamlit
+                const response = {
+                    type: 'focus-response',
+                    elementId: elementId,
+                    success: false
+                };
+                
                 if (element) {
                     focusOnElement(element);
+                    response.success = true;
+                    response.elementName = element.name;
                     
-                    window.parent.postMessage({
-                        type: 'focus-completed',
-                        elementId: event.data.elementId,
-                        elementName: element.name
-                    }, event.origin);
+                    // Destacar na lista (se existir)
+                    if (window.highlightElement) {
+                        window.highlightElement(elementId);
+                    }
                 }
+                
+                event.source.postMessage(response, event.origin);
             }
         });
+        
+        // 3. Função para destacar elemento na lista - ADICIONAR (nova função)
+        window.highlightElement = function(elementId) {
+            const items = document.querySelectorAll('.element-item');
+            items.forEach(item => {
+                item.classList.remove('highlighted');
+                if (item.dataset.elementId === elementId) {
+                    item.classList.add('highlighted');
+                    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            });
+        };
 
 /* ====== FIM DO CÓDIGO CORRIGIDO ====== */
 
