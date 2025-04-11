@@ -271,6 +271,84 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+
+
+
+        /* ====== NOVO CÓDIGO PARA ADICIONAR AO VISUALIZADOR ====== */
+
+        // 1. Função para encontrar elemento por ID
+        window.findElementById = function(id) {
+            return window.revitElements.all.find(el => 
+                el.elementId === id || 
+                el.name.includes(`_${id}`) || 
+                el.name.includes(` ${id}`)
+            );
+        };
+        
+        // 2. Atualize a função de extração de metadados para melhorar ID extraction
+        function extractRevitData(object) {
+            const name = object.name;
+            let elementId = '';
+            
+            // Padrão melhorado para extrair ID (números no final após underscore ou espaço)
+            const idMatch = name.match(/(?:^|_|\s)(\d+)$/);
+            if (idMatch) {
+                elementId = idMatch[1];
+            }
+            
+            return {
+                name: name,
+                rawName: name,
+                elementId: elementId,
+                family: extractFamily(name),
+                category: extractCategory(name)
+            };
+        }
+        
+        // 3. Atualize a função que cria os itens da lista para incluir data-element-id
+        function createElementListItem(element) {
+            const item = document.createElement('div');
+            item.className = 'element-item';
+            item.dataset.elementId = element.elementId; // Adiciona ID como data attribute
+            item.innerHTML = `
+                <strong>${element.name}</strong><br>
+                ${element.family ? `<small>Family: ${element.family}</small><br>` : ''}
+                ${element.elementId ? `<small>ID: ${element.elementId}</small>` : ''}
+            `;
+            
+            item.addEventListener('click', function() {
+                focusOnElement(element);
+            });
+            
+            return item;
+        }
+        
+        // 4. Adicione este listener para comunicação com a página pai (Streamlit)
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'focus-element' && event.data.elementId) {
+                const element = window.findElementById(event.data.elementId);
+                if (element) {
+                    focusOnElement(element);
+                    
+                    // Responde que o foco foi realizado
+                    window.parent.postMessage({
+                        type: 'focus-completed',
+                        elementId: event.data.elementId,
+                        elementName: element.name
+                    }, event.origin);
+                }
+            }
+        });
+        
+        /* ====== FIM DO CÓDIGO ADICIONAL ====== */
+
+
+
+
+
+
+        
     </script>
 </body>
 </html>
