@@ -254,12 +254,18 @@
         }
         
         // Barra de busca
-        document.getElementById('search').addEventListener('input', function(e) {
-            // Envia a atualização para o Streamlit
-            window.parent.postMessage({
-                type: 'search-update',
-                searchText: e.target.value
-            }, '*');
+        // Listener para o campo de busca (CORRIGIDO)
+        document.getElementById('search')?.addEventListener('input', function(e) {
+            try {
+                if (window.parent) {
+                    window.parent.postMessage({
+                        type: 'search-update',
+                        searchText: e.target.value
+                    }, '*');
+                }
+            } catch (error) {
+                console.error('Erro ao enviar atualização de busca:', error);
+            }
         });
 
         // 7. ANIMAÇÃO
@@ -372,62 +378,87 @@
         // 5. Listener para comunicação com Streamlit
         // 5. Listener para comunicação com Streamlit - SUBSTITUIR
         // Adicione esta função ao seu visualizador (dentro da tag <script>)
+        // Função para sincronizar campo de busca (CORRIGIDA)
         window.syncSearchField = function(searchText) {
-            const searchInput = document.getElementById('search');
-            if (searchInput) {
-                searchInput.value = searchText;
-                // Dispara o evento de input para atualizar a lista
-                const event = new Event('input', { bubbles: true });
-                searchInput.dispatchEvent(event);
+            try {
+                const searchInput = document.getElementById('search');
+                if (searchInput) {
+                    searchInput.value = searchText;
+                    const event = new Event('input', { bubbles: true });
+                    searchInput.dispatchEvent(event);
+                    
+                    // Envia atualização de volta para o Streamlit
+                    if (window.parent) {
+                        window.parent.postMessage({
+                            type: 'search-update',
+                            searchText: searchText
+                        }, '*');
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao sincronizar busca:', error);
             }
         };
         
         // Modifique o listener de mensagens para incluir a sincronização
+        // CORREÇÃO DA FUNÇÃO DE COMUNICAÇÃO
         window.addEventListener('message', function(event) {
-            // Verificar a origem para segurança (ajuste conforme seu domínio)
+            // Verificação de origem segura
             const allowedOrigins = [
                 'https://fabio-canova.github.io',
-                'https://improved-space-succotash-*.github.dev'
+                'https://improved-space-succotash-.*\.github\.dev',
+                'http://localhost:8501'  // Para desenvolvimento local
             ];
             
-            if (!allowedOrigins.some(origin => event.origin.match(new RegExp(origin.replace('*', '.*')))) {
+            if (!allowedOrigins.some(origin => {
+                const regex = new RegExp('^' + origin.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+                return regex.test(event.origin);
+            })) {
                 return;
             }
-        
-            if (event.data.type === 'focus-by-id') {
-                const elementId = event.data.elementId;
-                const element = window.findElementById(elementId);
-                
-                const response = {
-                    type: 'focus-response',
-                    elementId: elementId,
-                    success: false
-                };
-                
-                if (element) {
-                    focusOnElement(element);
-                    response.success = true;
-                    response.elementName = element.name;
+
+            // Tratamento de mensagens
+            try {
+                if (event.data && typeof event.data === 'object') {
+                    // Mensagem de foco por ID
+                    if (event.data.type === 'focus-by-id') {
+                        const elementId = event.data.elementId.toString(); // Garante que é string
+                        const element = window.findElementById(elementId);
+                        
+                        const response = {
+                            type: 'focus-response',
+                            elementId: elementId,
+                            success: !!element,
+                            elementName: element ? element.name : null
+                        };
+                        
+                        if (element) {
+                            focusOnElement(element);
+                            window.syncSearchField(elementId);
+                            if (window.highlightElement) {
+                                window.highlightElement(elementId);
+                            }
+                        }
+                        
+                        event.source.postMessage(response, event.origin);
+                    }
                     
-                    // Sincroniza o campo de busca
-                    window.syncSearchField(elementId);
-                    
-                    if (window.highlightElement) {
-                        window.highlightElement(elementId);
+                    // Mensagem de sincronização de busca
+                    if (event.data.type === 'sync-search' && event.data.searchText !== undefined) {
+                        const searchInput = document.getElementById('search');
+                        if (searchInput) {
+                            searchInput.value = event.data.searchText;
+                            const inputEvent = new Event('input', { bubbles: true });
+                            searchInput.dispatchEvent(inputEvent);
+                        }
                     }
                 }
-                
-                event.source.postMessage(response, event.origin);
-            }
-            
-            // Novo: Receber atualizações do campo de busca
-            if (event.data.type === 'sync-search' && document.getElementById('search')) {
-                document.getElementById('search').value = event.data.searchText;
-                // Dispara o evento de input para filtrar
-                const inputEvent = new Event('input', { bubbles: true });
-                document.getElementById('search').dispatchEvent(inputEvent);
+            } catch (error) {
+                console.error('Erro ao processar mensagem:', error);
             }
         });
+
+        
         
         // 3. Função para destacar elemento na lista - ADICIONAR (nova função)
         window.highlightElement = function(elementId) {
