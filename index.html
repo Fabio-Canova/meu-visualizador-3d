@@ -254,8 +254,12 @@
         }
         
         // Barra de busca
-        document.getElementById('search').addEventListener('input', (e) => {
-            updateElementsList(e.target.value);
+        document.getElementById('search').addEventListener('input', function(e) {
+            // Envia a atualização para o Streamlit
+            window.parent.postMessage({
+                type: 'search-update',
+                searchText: e.target.value
+            }, '*');
         });
 
         // 7. ANIMAÇÃO
@@ -367,12 +371,33 @@
         
         // 5. Listener para comunicação com Streamlit
         // 5. Listener para comunicação com Streamlit - SUBSTITUIR
+        // Adicione esta função ao seu visualizador (dentro da tag <script>)
+        window.syncSearchField = function(searchText) {
+            const searchInput = document.getElementById('search');
+            if (searchInput) {
+                searchInput.value = searchText;
+                // Dispara o evento de input para atualizar a lista
+                const event = new Event('input', { bubbles: true });
+                searchInput.dispatchEvent(event);
+            }
+        };
+        
+        // Modifique o listener de mensagens para incluir a sincronização
         window.addEventListener('message', function(event) {
+            // Verificar a origem para segurança (ajuste conforme seu domínio)
+            const allowedOrigins = [
+                'https://fabio-canova.github.io',
+                'https://improved-space-succotash-*.github.dev'
+            ];
+            
+            if (!allowedOrigins.some(origin => event.origin.match(new RegExp(origin.replace('*', '.*')))) {
+                return;
+            }
+        
             if (event.data.type === 'focus-by-id') {
                 const elementId = event.data.elementId;
                 const element = window.findElementById(elementId);
                 
-                // Responde ao Streamlit
                 const response = {
                     type: 'focus-response',
                     elementId: elementId,
@@ -384,13 +409,23 @@
                     response.success = true;
                     response.elementName = element.name;
                     
-                    // Destacar na lista (se existir)
+                    // Sincroniza o campo de busca
+                    window.syncSearchField(elementId);
+                    
                     if (window.highlightElement) {
                         window.highlightElement(elementId);
                     }
                 }
                 
                 event.source.postMessage(response, event.origin);
+            }
+            
+            // Novo: Receber atualizações do campo de busca
+            if (event.data.type === 'sync-search' && document.getElementById('search')) {
+                document.getElementById('search').value = event.data.searchText;
+                // Dispara o evento de input para filtrar
+                const inputEvent = new Event('input', { bubbles: true });
+                document.getElementById('search').dispatchEvent(inputEvent);
             }
         });
         
