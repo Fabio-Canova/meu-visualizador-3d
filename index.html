@@ -315,25 +315,19 @@
         
         // 2. Função para encontrar elemento por ID
         // 2. Função para encontrar elemento por ID - SUBSTITUIR
+        // Verifica se está sendo executado dentro de um iframe do Streamlit
+        const isStreamlit = window.location.search.includes('streamlit=true');
+        
+        // Função melhorada para encontrar elementos
         window.findElementById = function(id) {
             if (!id) return null;
             
-            // Busca em diferentes padrões
-            const element = window.revitElements.all.find(el => {
-                // Caso 1: ID exato
-                if (el.elementId === id) return true;
-                
-                // Caso 2: ID no final do nome (após underscore ou espaço)
-                const idSuffix = new RegExp(`(?:^|_|\\s)${id}$`);
-                if (idSuffix.test(el.name)) return true;
-                
-                // Caso 3: ID em qualquer parte do nome
-                if (el.name.includes(id)) return true;
-                
-                return false;
-            });
-            
-            return element || null;
+            // Busca em diferentes formatos
+            return window.revitElements.all.find(el => {
+                return el.elementId === id || 
+                       el.name.endsWith('_' + id) ||
+                       el.name.includes(id);
+            }) || null;
         };
 
         
@@ -402,36 +396,64 @@
         
         // Modifique o listener de mensagens para incluir a sincronização
         // CORREÇÃO DA FUNÇÃO DE COMUNICAÇÃO
+        // Listener de mensagens aprimorado
         window.addEventListener('message', function(event) {
             // Verificação de origem segura
-            if (event.origin !== 'https://fabio-canova.github.io' && 
-                !event.origin.includes('github.dev')) {
+            const allowedOrigins = [
+                'https://fabio-canova.github.io',
+                'http://localhost:8501',
+                'https://*.github.dev'
+            ];
+            
+            if (!allowedOrigins.some(origin => event.origin.match(new RegExp(origin.replace('*', '.*'))))) {
                 return;
             }
         
-            // Foco por ID
+            // Processamento de mensagens
             if (event.data.type === 'focus-by-id') {
-                const elementId = event.data.elementId;
-                const element = window.findElementById(elementId);
+                const element = window.findElementById(event.data.elementId);
                 
                 if (element) {
+                    // Foco no elemento
                     focusOnElement(element);
                     
-                    // Atualiza o campo de busca sem disparar eventos
-                    const searchInput = document.getElementById('search');
-                    if (searchInput) {
-                        searchInput.value = elementId;
+                    // Atualiza o campo de busca se solicitado
+                    if (event.data.updateSearch) {
+                        const searchInput = document.getElementById('search');
+                        if (searchInput) {
+                            searchInput.value = event.data.elementId;
+                            // Dispara evento de input para filtrar
+                            const inputEvent = new Event('input', { bubbles: true });
+                            searchInput.dispatchEvent(inputEvent);
+                        }
                     }
                     
-                    // Responde com sucesso
+                    // Resposta de sucesso
                     event.source.postMessage({
                         type: 'focus-response',
                         success: true,
-                        elementId: elementId
+                        elementId: event.data.elementId
                     }, event.origin);
                 }
             }
         });
+        
+        // Se for executado no Streamlit, configura comportamento especial
+        if (isStreamlit) {
+            // Desativa recarregamentos automáticos
+            window.preventReload = true;
+            
+            // Configura o campo de busca para sincronização
+            const searchInput = document.getElementById('search');
+            if (searchInput) {
+                searchInput.addEventListener('input', function(e) {
+                    window.parent.postMessage({
+                        type: 'search-update',
+                        searchText: e.target.value
+                    }, '*');
+                });
+            }
+        }
 
         
         
