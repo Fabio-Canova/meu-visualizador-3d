@@ -1,6 +1,5 @@
 
 
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -253,7 +252,7 @@
                     element.elementId ? '<small>ID: ' + element.elementId + '</small>' : ''
                 ].join('');
                 
-                item.addEventListener('click', function() {
+                item.('click', function() {
                     focusOnElement(element);
                 });
                 
@@ -265,7 +264,7 @@
         window.findElementById = function(id) {
             if (!id) return null;
             
-            return window.revitElements.all.find(function(el) {
+            return window.revitElements.all.find(el => {
                 return el.elementId === id || 
                        el.name.endsWith('_' + id) ||
                        el.name.includes(id);
@@ -290,27 +289,55 @@
                 updateElementsList(searchText);
             }
         };
-        
+
+
+        // AQUI
+        // Listener de mensagens aprimorado
         window.addEventListener('message', function(event) {
+            // Verificação de origem segura
             const allowedOrigins = [
                 'https://fabio-canova.github.io',
                 'https://*.github.dev'
             ];
             
-            var originIsValid = allowedOrigins.some(function(origin) {
-                return event.origin.match(new RegExp(origin.replace('*', '.*')));
+            const originIsValid = allowedOrigins.some(origin => {
+                const regex = new RegExp('^' + origin.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+                return regex.test(event.origin);
             });
-            
+        
             if (!originIsValid) return;
-            
-            if (event.data.type === 'focus-by-id') {
+        
+            // Processa mensagens do Streamlit
+            if (event.data.type === 'streamlit-focus') {
                 const element = window.findElementById(event.data.elementId);
                 
                 if (element) {
+                    // 1. Foco no elemento 3D
                     focusOnElement(element);
-                    window.syncSearchField(event.data.elementId);
-                    window.highlightElementInList(event.data.elementId);
                     
+                    // 2. Atualiza o campo de busca
+                    const searchInput = document.getElementById('search');
+                    if (searchInput && event.data.updateSearch) {
+                        searchInput.value = event.data.elementId;
+                        
+                        // 3. Filtra a lista para mostrar apenas o elemento
+                        const listContainer = document.getElementById('elements-list');
+                        if (listContainer) {
+                            listContainer.innerHTML = '';
+                            
+                            const item = document.createElement('div');
+                            item.className = 'element-item ';
+                            item.innerHTML = `
+                                <strong>${element.name}</strong><br>
+                                ${element.family ? `<small>Family: ${element.family}</small><br>` : ''}
+                                ${element.elementId ? `<small>ID: ${element.elementId}</small>` : ''}
+                            `;
+                            item.addEventListener('click', () => focusOnElement(element));
+                            listContainer.appendChild(item);
+                        }
+                    }
+                    
+                    // 4. Responde ao Streamlit
                     event.source.postMessage({
                         type: 'focus-response',
                         success: true,
