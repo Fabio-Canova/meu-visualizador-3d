@@ -1,6 +1,5 @@
 
 
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -33,18 +32,30 @@
             border-radius: 4px;
             cursor: pointer;
             border: 1px solid #eee;
+            transition: all 0.3s ease;
         }
         .element-item:hover {
             background: #e3f2fd;
+        }
+        .element-item.highlighted {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            animation: pulse 2s infinite;
         }
         #search {
             width: 100%;
             padding: 8px;
             margin-bottom: 10px;
             box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        @keyframes pulse {
+            0% { background-color: #e3f2fd; }
+            50% { background-color: #bbdefb; }
+            100% { background-color: #e3f2fd; }
         }
     </style>
-    <!-- Scripts (ORDEM CORRETA É ESSENCIAL) -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/draco_decoder.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/DRACOLoader.min.js"></script>
@@ -56,7 +67,7 @@
     <div id="container">
         <div id="viewer"></div>
         <div id="panel">
-            <h3>Elementos </h3>
+            <h3>Elementos</h3>
             <input type="text" id="search" placeholder="Buscar elementos...">
             <div id="elements-list"></div>
         </div>
@@ -104,7 +115,6 @@
             function(gltf) {
                 console.log('Modelo carregado com sucesso!');
                 
-                // Processa todos os objetos
                 gltf.scene.traverse(function(child) {
                     if (child.isMesh) {
                         const elementData = extractRevitData(child);
@@ -113,7 +123,6 @@
                             ...elementData
                         };
                         
-                        // Armazena nas estruturas
                         window.revitElements.all.push(element);
                         window.revitElements.byName[child.name] = element;
                         
@@ -136,13 +145,8 @@
                 });
 
                 scene.add(gltf.scene);
-                
-                // Ajusta a câmera para visualizar todo o modelo
                 fitCameraToObject(gltf.scene);
-                
-                // Atualiza a lista de elementos na interface
                 updateElementsList();
-                
                 console.log('Elementos Revit carregados:', window.revitElements);
             },
             undefined,
@@ -151,25 +155,29 @@
             }
         );
 
-        // 5. FUNÇÕES PARA MANIPULAÇÃO DE ELEMENTOS
+        // 5. FUNÇÕES PRINCIPAIS
         function extractRevitData(object) {
-            // Extrai metadados do Revit do nome do objeto
             const name = object.name;
             let elementId = '';
             let family = '';
             let category = '';
             
-            // Padrão: "Nome_do_Elemento_1234567" (ID no final)
             const idMatch = name.match(/_(\d+)$/);
             if (idMatch) {
                 elementId = idMatch[1];
             }
             
-            // Padrão: "Tipo_do_Family_Nome" (extrai family)
             const familyMatch = name.split('_');
             if (familyMatch.length > 1) {
                 family = familyMatch.slice(0, -1).join(' ');
             }
+            
+            if (name.match(/parede|wall/i)) category = 'Wall';
+            else if (name.match(/porta|door/i)) category = 'Door';
+            else if (name.match(/janela|window/i)) category = 'Window';
+            else if (name.match(/piso|floor/i)) category = 'Floor';
+            else if (name.match(/teto|ceiling/i)) category = 'Ceiling';
+            else category = 'Other';
             
             return {
                 name: name,
@@ -186,7 +194,6 @@
             const center = bbox.getCenter(new THREE.Vector3());
             const size = bbox.getSize(new THREE.Vector3());
             
-            // Animação suave da câmera
             new TWEEN.Tween(camera.position)
                 .to({
                     x: center.x,
@@ -196,12 +203,10 @@
                 .easing(TWEEN.Easing.Quadratic.Out)
                 .start();
             
-            // Animação do alvo dos controles
             new TWEEN.Tween(controls.target)
                 .to(center, 1000)
                 .start();
             
-            // Destaque visual temporário
             obj.material.emissive.setHex(0x888888);
             setTimeout(() => {
                 obj.material.emissive.setHex(0x000000);
@@ -223,7 +228,6 @@
             controls.update();
         }
         
-        // 6. INTERFACE DO USUÁRIO
         function updateElementsList(filter = '') {
             const listContainer = document.getElementById('elements-list');
             if (!listContainer) return;
@@ -235,8 +239,9 @@
                     el.name.toLowerCase().includes(filter.toLowerCase()) ||
                     (el.elementId && el.elementId.includes(filter)) ||
                     (el.family && el.family.toLowerCase().includes(filter.toLowerCase()))
+                  )
                 : window.revitElements.all.slice(0, 1000);
-        
+            
             elementsToShow.forEach(element => {
                 const item = document.createElement('div');
                 item.className = 'element-item';
@@ -255,30 +260,17 @@
             });
         }
         
-        // Barra de busca
-        // Listener para o campo de busca (CORRIGIDO)
-        document.getElementById('search').addEventListener('input', function(e) {
-            // Se o campo estiver vazio, mostra todos os elementos
-            if (!e.target.value) {
-                updateElementsList();
-                return;
-            }
+        // 6. COMUNICAÇÃO COM STREAMLIT
+        window.findElementById = function(id) {
+            if (!id) return null;
             
-            // Se veio do Streamlit (contém apenas o ID), faz busca exata
-            if (e.target.value.match(/^\d+$/)) {
-                const element = window.findElementById(e.target.value);
-                if (element) {
-                    updateElementsList();
-                    window.highlightElementInList(e.target.value);
-                    focusOnElement(element);
-                }
-            } else {
-                // Busca normal por texto
-                updateElementsList(e.target.value);
-            }
-        });
-
-        // Função para destacar elemento na lista
+            return window.revitElements.all.find(el => {
+                return el.elementId === id || 
+                       el.name.endsWith('_' + id) ||
+                       el.name.includes(id);
+            }) || null;
+        };
+        
         window.highlightElementInList = function(elementId) {
             const items = document.querySelectorAll('.element-item');
             items.forEach(item => {
@@ -289,168 +281,33 @@
                 }
             });
         };
-
-        // 7. ANIMAÇÃO
-        function animate() {
-            requestAnimationFrame(animate);
-            TWEEN.update();
-            controls.update();
-            renderer.render(scene, camera);
-        }
-        animate();
         
-        // 8. REDIMENSIONAMENTO
-        window.addEventListener('resize', function() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-
-
-
-        /* ====== NOVO CÓDIGO PARA ADICIONAR AO VISUALIZADOR ====== */
-        /* ====== CÓDIGO CORRIGIDO PARA ADICIONAR AO VISUALIZADOR ====== */
-        
-        // 1. Funções auxiliares para extração de metadados
-        function extractFamily(name) {
-            // Extrai o nome da família (remove o ID no final se existir)
-            const withoutId = name.replace(/(?:_|\s)\d+$/, '');
-            const parts = withoutId.split(/_|\s/);
-            
-            // Pega todas as partes exceto a última (que geralmente é o tipo)
-            if (parts.length > 1) {
-                return parts.slice(0, -1).join(' ');
-            }
-            return withoutId;
-        }
-        
-        function extractCategory(name) {
-            // Categorias básicas baseadas em prefixos comuns
-            if (name.match(/parede|wall/i)) return 'Wall';
-            if (name.match(/porta|door/i)) return 'Door';
-            if (name.match(/janela|window/i)) return 'Window';
-            if (name.match(/piso|floor/i)) return 'Floor';
-            if (name.match(/teto|ceiling/i)) return 'Ceiling';
-            return 'Other';
-        }
-        
-        // 2. Função para encontrar elemento por ID
-        // 2. Função para encontrar elemento por ID - SUBSTITUIR
-        // Verifica se está sendo executado dentro de um iframe do Streamlit
-        const isStreamlit = window.location.search.includes('streamlit=true');
-        
-        // Função melhorada para encontrar elementos
-        window.findElementById = function(id) {
-            if (!id) return null;
-            
-            // Busca em diferentes formatos
-            return window.revitElements.all.find(el => {
-                return el.elementId === id || 
-                       el.name.endsWith('_' + id) ||
-                       el.name.includes(id);
-            }) || null;
-        };
-
-        
-        // 3. Função de extração de metadados completa
-        function extractRevitData(object) {
-            const name = object.name;
-            let elementId = '';
-            
-            // Padrão melhorado para extrair ID (números no final)
-            const idMatch = name.match(/(?:^|_|\s)(\d+)$/);
-            if (idMatch) {
-                elementId = idMatch[1];
-            }
-            
-            return {
-                name: name,
-                rawName: name,
-                elementId: elementId,
-                family: extractFamily(name),  // Agora a função está definida
-                category: extractCategory(name)  // Função definida acima
-            };
-        }
-        
-        // 4. Função para criar itens da lista
-        function createElementListItem(element) {
-            const item = document.createElement('div');
-            item.className = 'element-item';
-            item.dataset.elementId = element.elementId;
-            item.innerHTML = `
-                <strong>${element.name}</strong><br>
-                ${element.family ? `<small>Family: ${element.family}</small><br>` : ''}
-                ${element.elementId ? `<small>ID: ${element.elementId}</small>` : ''}
-            `;
-            
-            item.addEventListener('click', function() {
-                focusOnElement(element);
-            });
-            
-            return item;
-        }
-        
-        // 5. Listener para comunicação com Streamlit
-        // 5. Listener para comunicação com Streamlit - SUBSTITUIR
-        // Adicione esta função ao seu visualizador (dentro da tag <script>)
-        // Função para sincronizar campo de busca (CORRIGIDA)
         window.syncSearchField = function(searchText) {
-            try {
-                const searchInput = document.getElementById('search');
-                if (searchInput) {
-                    searchInput.value = searchText;
-                    const event = new Event('input', { bubbles: true });
-                    searchInput.dispatchEvent(event);
-                    
-                    // Envia atualização de volta para o Streamlit
-                    if (window.parent) {
-                        window.parent.postMessage({
-                            type: 'search-update',
-                            searchText: searchText
-                        }, '*');
-                    }
-                }
-            } catch (error) {
-                console.error('Erro ao sincronizar busca:', error);
+            const searchInput = document.getElementById('search');
+            if (searchInput) {
+                searchInput.value = searchText;
+                updateElementsList(searchText);
             }
         };
         
-        // Modifique o listener de mensagens para incluir a sincronização
-        // CORREÇÃO DA FUNÇÃO DE COMUNICAÇÃO
-        // Listener de mensagens aprimorado
         window.addEventListener('message', function(event) {
-            // Verificação de origem segura
             const allowedOrigins = [
                 'https://fabio-canova.github.io',
-                'http://localhost:8501',
                 'https://*.github.dev'
             ];
             
-            if (!allowedOrigins.some(origin => event.origin.match(new RegExp(origin.replace('*', '.*'))))) {
-                return;
-            }
-        
-            // Processamento de mensagens
+            if (!allowedOrigins.some(origin => 
+                event.origin.match(new RegExp(origin.replace('*', '.*')))
+            ) return;
+            
             if (event.data.type === 'focus-by-id') {
                 const element = window.findElementById(event.data.elementId);
                 
                 if (element) {
-                    // Foco no elemento
                     focusOnElement(element);
+                    window.syncSearchField(event.data.elementId);
+                    window.highlightElementInList(event.data.elementId);
                     
-                    // Atualiza o campo de busca se solicitado
-                    if (event.data.updateSearch) {
-                        const searchInput = document.getElementById('search');
-                        if (searchInput) {
-                            searchInput.value = event.data.elementId;
-                            // Dispara evento de input para filtrar
-                            const inputEvent = new Event('input', { bubbles: true });
-                            searchInput.dispatchEvent(inputEvent);
-                        }
-                    }
-                    
-                    // Resposta de sucesso
                     event.source.postMessage({
                         type: 'focus-response',
                         success: true,
@@ -460,40 +317,25 @@
             }
         });
         
-        // Se for executado no Streamlit, configura comportamento especial
-        if (isStreamlit) {
-            // Desativa recarregamentos automáticos
-            window.preventReload = true;
-            
-            // Configura o campo de busca para sincronização
-            const searchInput = document.getElementById('search');
-            if (searchInput) {
-                searchInput.addEventListener('input', function(e) {
-                    window.parent.postMessage({
-                        type: 'search-update',
-                        searchText: e.target.value
-                    }, '*');
-                });
-            }
+        // 7. CONFIGURAÇÃO DE EVENTOS
+        document.getElementById('search').addEventListener('input', function(e) {
+            updateElementsList(e.target.value);
+        });
+        
+        // 8. ANIMAÇÃO
+        function animate() {
+            requestAnimationFrame(animate);
+            TWEEN.update();
+            controls.update();
+            renderer.render(scene, camera);
         }
-
+        animate();
         
-        
-        // 3. Função para destacar elemento na lista - ADICIONAR (nova função)
-        window.highlightElement = function(elementId) {
-            const items = document.querySelectorAll('.element-item');
-            items.forEach(item => {
-                item.classList.remove('highlighted');
-                if (item.dataset.elementId === elementId) {
-                    item.classList.add('highlighted');
-                    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            });
-        };
-
-/* ====== FIM DO CÓDIGO CORRIGIDO ====== */
-
-      
+        window.addEventListener('resize', function() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
