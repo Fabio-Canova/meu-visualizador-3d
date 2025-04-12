@@ -1,5 +1,4 @@
 
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -252,7 +251,7 @@
                     element.elementId ? '<small>ID: ' + element.elementId + '</small>' : ''
                 ].join('');
                 
-                item.('click', function() {
+                item.addEventListener('click', function() {
                     focusOnElement(element);
                 });
                 
@@ -261,20 +260,14 @@
         }
         
         // 6. COMUNICAÇÃO COM STREAMLIT
-        // FUNÇÃO CORRIGIDA PARA ENCONTRAR ELEMENTOS
         window.findElementById = function(id) {
-            if (!id || !window.revitElements || !window.revitElements.all) return null;
+            if (!id) return null;
             
-            // Busca em diferentes formatos
-            for (let i = 0; i < window.revitElements.all.length; i++) {
-                const el = window.revitElements.all[i];
-                if (el.elementId === id || 
-                    el.name.endsWith('_' + id) || 
-                    el.name.includes(id)) {
-                    return el;
-                }
-            }
-            return null;
+            return window.revitElements.all.find(function(el) {
+                return el.elementId === id || 
+                       el.name.endsWith('_' + id) ||
+                       el.name.includes(id);
+            }) || null;
         };
         
         window.highlightElementInList = function(elementId) {
@@ -295,53 +288,33 @@
                 updateElementsList(searchText);
             }
         };
-
-
-        // AQUI
-        // Listener de mensagens aprimorado
-        // LISTENER DE MENSAGENS CORRIGIDO
+        
         window.addEventListener('message', function(event) {
-            // Verificação de origem segura simplificada
-            if (!event.origin.includes('github.io') && !event.origin.includes('github.dev')) {
-                return;
-            }
-
-            // Processamento de mensagens seguro
-            try {
-                if (event.data && event.data.type === 'streamlit-focus') {
-                    const elementId = String(event.data.elementId || '');
-                    const element = window.findElementById(elementId);
+            const allowedOrigins = [
+                'https://fabio-canova.github.io',
+                'https://*.github.dev'
+            ];
+            
+            var originIsValid = allowedOrigins.some(function(origin) {
+                return event.origin.match(new RegExp(origin.replace('*', '.*')));
+            });
+            
+            if (!originIsValid) return;
+            
+            if (event.data.type === 'focus-by-id') {
+                const element = window.findElementById(event.data.elementId);
+                
+                if (element) {
+                    focusOnElement(element);
+                    window.syncSearchField(event.data.elementId);
+                    window.highlightElementInList(event.data.elementId);
                     
-                    if (element) {
-                        // 1. Foco no elemento 3D
-                        focusOnElement(element);
-                        
-                        // 2. Atualização segura do campo de busca
-                        const searchInput = document.getElementById('search');
-                        if (searchInput) {
-                            searchInput.value = elementId;
-                            
-                            // 3. Atualização da lista
-                            const listContainer = document.getElementById('elements-list');
-                            if (listContainer) {
-                                listContainer.innerHTML = '';
-                                const item = document.createElement('div');
-                                item.className = 'element-item highlighted';
-                                item.innerHTML = [
-                                    '<strong>', element.name, '</strong><br>',
-                                    element.family ? '<small>Family: ' + element.family + '</small><br>' : '',
-                                    element.elementId ? '<small>ID: ' + element.elementId + '</small>' : ''
-                                ].join('');
-                                item.addEventListener('click', function() {
-                                    focusOnElement(element);
-                                });
-                                listContainer.appendChild(item);
-                            }
-                        }
-                    }
+                    event.source.postMessage({
+                        type: 'focus-response',
+                        success: true,
+                        elementId: event.data.elementId
+                    }, event.origin);
                 }
-            } catch (error) {
-                console.error('Erro ao processar mensagem:', error);
             }
         });
         
