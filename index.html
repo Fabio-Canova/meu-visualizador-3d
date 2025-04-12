@@ -226,6 +226,8 @@
         // 6. INTERFACE DO USUÁRIO
         function updateElementsList(filter = '') {
             const listContainer = document.getElementById('elements-list');
+            if (!listContainer) return;
+            
             listContainer.innerHTML = '';
             
             const elementsToShow = filter
@@ -233,12 +235,12 @@
                     el.name.toLowerCase().includes(filter.toLowerCase()) ||
                     (el.elementId && el.elementId.includes(filter)) ||
                     (el.family && el.family.toLowerCase().includes(filter.toLowerCase()))
-                  )
-                : window.revitElements.all.slice(0, 1000); // Limita a 1000 itens para performance
-            
+                : window.revitElements.all.slice(0, 1000);
+        
             elementsToShow.forEach(element => {
                 const item = document.createElement('div');
                 item.className = 'element-item';
+                item.dataset.elementId = element.elementId;
                 item.innerHTML = `
                     <strong>${element.name}</strong><br>
                     ${element.family ? `<small>Family: ${element.family}</small><br>` : ''}
@@ -255,18 +257,38 @@
         
         // Barra de busca
         // Listener para o campo de busca (CORRIGIDO)
-        document.getElementById('search')?.addEventListener('input', function(e) {
-            try {
-                if (window.parent) {
-                    window.parent.postMessage({
-                        type: 'search-update',
-                        searchText: e.target.value
-                    }, '*');
+        document.getElementById('search').addEventListener('input', function(e) {
+            // Se o campo estiver vazio, mostra todos os elementos
+            if (!e.target.value) {
+                updateElementsList();
+                return;
+            }
+            
+            // Se veio do Streamlit (contém apenas o ID), faz busca exata
+            if (e.target.value.match(/^\d+$/)) {
+                const element = window.findElementById(e.target.value);
+                if (element) {
+                    updateElementsList();
+                    window.highlightElementInList(e.target.value);
+                    focusOnElement(element);
                 }
-            } catch (error) {
-                console.error('Erro ao enviar atualização de busca:', error);
+            } else {
+                // Busca normal por texto
+                updateElementsList(e.target.value);
             }
         });
+
+        // Função para destacar elemento na lista
+        window.highlightElementInList = function(elementId) {
+            const items = document.querySelectorAll('.element-item');
+            items.forEach(item => {
+                item.classList.remove('highlighted');
+                if (item.dataset.elementId === elementId) {
+                    item.classList.add('highlighted');
+                    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            });
+        };
 
         // 7. ANIMAÇÃO
         function animate() {
