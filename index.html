@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -235,24 +236,24 @@
             listContainer.innerHTML = '';
             
             const elementsToShow = filter
-                ? window.revitElements.all.filter(el => 
-                    el.name.toLowerCase().includes(filter.toLowerCase()) ||
-                    (el.elementId && el.elementId.includes(filter)) ||
-                    (el.family && el.family.toLowerCase().includes(filter.toLowerCase()))
-                  )
+                ? window.revitElements.all.filter(function(el) { 
+                    return el.name.toLowerCase().includes(filter.toLowerCase()) ||
+                           (el.elementId && el.elementId.includes(filter)) ||
+                           (el.family && el.family.toLowerCase().includes(filter.toLowerCase()));
+                  })
                 : window.revitElements.all.slice(0, 1000);
             
-            elementsToShow.forEach(element => {
+            elementsToShow.forEach(function(element) {
                 const item = document.createElement('div');
                 item.className = 'element-item';
                 item.dataset.elementId = element.elementId;
-                item.innerHTML = `
-                    <strong>${element.name}</strong><br>
-                    ${element.family ? `<small>Family: ${element.family}</small><br>` : ''}
-                    ${element.elementId ? `<small>ID: ${element.elementId}</small>` : ''}
-                `;
+                item.innerHTML = [
+                    '<strong>', element.name, '</strong><br>',
+                    element.family ? '<small>Family: ' + element.family + '</small><br>' : '',
+                    element.elementId ? '<small>ID: ' + element.elementId + '</small>' : ''
+                ].join('');
                 
-                item.addEventListener('click', () => {
+                item.addEventListener('click', function() {
                     focusOnElement(element);
                 });
                 
@@ -264,7 +265,7 @@
         window.findElementById = function(id) {
             if (!id) return null;
             
-            return window.revitElements.all.find(el => {
+            return window.revitElements.all.find(function(el) {
                 return el.elementId === id || 
                        el.name.endsWith('_' + id) ||
                        el.name.includes(id);
@@ -273,7 +274,7 @@
         
         window.highlightElementInList = function(elementId) {
             const items = document.querySelectorAll('.element-item');
-            items.forEach(item => {
+            items.forEach(function(item) {
                 item.classList.remove('highlighted');
                 if (item.dataset.elementId === elementId) {
                     item.classList.add('highlighted');
@@ -296,9 +297,11 @@
                 'https://*.github.dev'
             ];
             
-            if (!allowedOrigins.some(origin => 
-                event.origin.match(new RegExp(origin.replace('*', '.*')))
-            ) return;
+            var originIsValid = allowedOrigins.some(function(origin) {
+                return event.origin.match(new RegExp(origin.replace('*', '.*')));
+            });
+            
+            if (!originIsValid) return;
             
             if (event.data.type === 'focus-by-id') {
                 const element = window.findElementById(event.data.elementId);
