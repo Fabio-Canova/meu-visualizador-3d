@@ -251,7 +251,7 @@
                     element.elementId ? '<small>ID: ' + element.elementId + '</small>' : ''
                 ].join('');
                 
-                item.addEventListener('click', function() {
+                item.('click', function() {
                     focusOnElement(element);
                 });
                 
@@ -299,7 +299,7 @@
         // LISTENER DE MENSAGENS CORRIGIDO
         window.addEventListener('message', function(event) {
             // Verificação de origem segura simplificada
-            if (!event.origin.includes('github.io') && !event.origin.includes('github.dev')) {
+            if (!event.origin.includes('github.io') && !event.origin.includes('github.dev') && !event.origin.includes('streamlit.app')) {
                 return;
             }
 
