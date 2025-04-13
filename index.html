@@ -300,7 +300,6 @@
         window.addEventListener('message', function(event) {
             // Verificação de origem segura simplificada
             if (!event.origin.includes('github.io') && 
-                !event.origin.includes('github.dev') &&
                 !event.origin.includes('streamlit.app')) {
                 return;
             }
