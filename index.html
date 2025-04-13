@@ -1,12 +1,14 @@
 
+
+
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <title>Visualizador 3D Revit</title>
     <style>
-        body { 
-            margin: 0; 
+        body {
+            margin: 0;
             font-family: Arial;
             overflow: hidden;
         }
@@ -76,7 +78,7 @@
         // 1. CONFIGURAÇÃO BÁSICA
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xf0f0f0);
-        
+
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(document.getElementById('viewer').clientWidth, document.getElementById('viewer').clientHeight);
@@ -85,10 +87,10 @@
         // 2. CONTROLES E ILUMINAÇÃO
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
-        
+
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
         scene.add(ambientLight);
-        
+
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
         directionalLight.position.set(5, 10, 7);
         scene.add(directionalLight);
@@ -105,15 +107,15 @@
         // 4. CARREGAMENTO DO MODELO
         const dracoLoader = new THREE.DRACOLoader();
         dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/libs/draco/');
-        
+
         const loader = new THREE.GLTFLoader();
         loader.setDRACOLoader(dracoLoader);
-        
+
         loader.load(
             'modelo.glb',
             function(gltf) {
                 console.log('Modelo carregado com sucesso!');
-                
+
                 gltf.scene.traverse(function(child) {
                     if (child.isMesh) {
                         const elementData = extractRevitData(child);
@@ -121,22 +123,22 @@
                             threeObj: child,
                             ...elementData
                         };
-                        
+
                         window.revitElements.all.push(element);
                         window.revitElements.byName[child.name] = element;
-                        
+
                         if (elementData.elementId) {
                             window.revitElements.byId[elementData.elementId] = element;
                         }
-                        
+
                         if (elementData.family) {
-                            window.revitElements.byFamily[elementData.family] = 
+                            window.revitElements.byFamily[elementData.family] =
                                 window.revitElements.byFamily[elementData.family] || [];
                             window.revitElements.byFamily[elementData.family].push(element);
                         }
-                        
+
                         if (elementData.category) {
-                            window.revitElements.byCategory[elementData.category] = 
+                            window.revitElements.byCategory[elementData.category] =
                                 window.revitElements.byCategory[elementData.category] || [];
                             window.revitElements.byCategory[elementData.category].push(element);
                         }
@@ -160,24 +162,24 @@
             let elementId = '';
             let family = '';
             let category = '';
-            
+
             const idMatch = name.match(/_(\d+)$/);
             if (idMatch) {
                 elementId = idMatch[1];
             }
-            
+
             const familyMatch = name.split('_');
             if (familyMatch.length > 1) {
                 family = familyMatch.slice(0, -1).join(' ');
             }
-            
+
             if (name.match(/parede|wall/i)) category = 'Wall';
             else if (name.match(/porta|door/i)) category = 'Door';
             else if (name.match(/janela|window/i)) category = 'Window';
             else if (name.match(/piso|floor/i)) category = 'Floor';
             else if (name.match(/teto|ceiling/i)) category = 'Ceiling';
             else category = 'Other';
-            
+
             return {
                 name: name,
                 rawName: name,
@@ -186,13 +188,13 @@
                 category: category
             };
         }
-        
+
         function focusOnElement(element) {
             const obj = element.threeObj;
             const bbox = new THREE.Box3().setFromObject(obj);
             const center = bbox.getCenter(new THREE.Vector3());
             const size = bbox.getSize(new THREE.Vector3());
-            
+
             new TWEEN.Tween(camera.position)
                 .to({
                     x: center.x,
@@ -201,23 +203,23 @@
                 }, 1000)
                 .easing(TWEEN.Easing.Quadratic.Out)
                 .start();
-            
+
             new TWEEN.Tween(controls.target)
                 .to(center, 1000)
                 .start();
-            
+
             obj.material.emissive.setHex(0x888888);
             setTimeout(() => {
                 obj.material.emissive.setHex(0x000000);
             }, 2000);
         }
-        
+
         function fitCameraToObject(object) {
             const bbox = new THREE.Box3().setFromObject(object);
             const center = bbox.getCenter(new THREE.Vector3());
             const size = bbox.getSize(new THREE.Vector3());
             const maxDim = Math.max(size.x, size.y, size.z);
-            
+
             camera.position.set(
                 center.x,
                 center.y,
@@ -226,21 +228,21 @@
             controls.target.copy(center);
             controls.update();
         }
-        
+
         function updateElementsList(filter = '') {
             const listContainer = document.getElementById('elements-list');
             if (!listContainer) return;
-            
+
             listContainer.innerHTML = '';
-            
+
             const elementsToShow = filter
-                ? window.revitElements.all.filter(function(el) { 
+                ? window.revitElements.all.filter(function(el) {
                     return el.name.toLowerCase().includes(filter.toLowerCase()) ||
                            (el.elementId && el.elementId.includes(filter)) ||
                            (el.family && el.family.toLowerCase().includes(filter.toLowerCase()));
                   })
                 : window.revitElements.all.slice(0, 1000);
-            
+
             elementsToShow.forEach(function(element) {
                 const item = document.createElement('div');
                 item.className = 'element-item';
@@ -250,32 +252,32 @@
                     element.family ? '<small>Family: ' + element.family + '</small><br>' : '',
                     element.elementId ? '<small>ID: ' + element.elementId + '</small>' : ''
                 ].join('');
-                
-                item.('click', function() {
+
+                item.addEventListener('click', function() {
                     focusOnElement(element);
                 });
-                
+
                 listContainer.appendChild(item);
             });
         }
-        
+
         // 6. COMUNICAÇÃO COM STREAMLIT
         // FUNÇÃO CORRIGIDA PARA ENCONTRAR ELEMENTOS
         window.findElementById = function(id) {
             if (!id || !window.revitElements || !window.revitElements.all) return null;
-            
+
             // Busca em diferentes formatos
             for (let i = 0; i < window.revitElements.all.length; i++) {
                 const el = window.revitElements.all[i];
-                if (el.elementId === id || 
-                    el.name.endsWith('_' + id) || 
+                if (el.elementId === id ||
+                    el.name.endsWith('_' + id) ||
                     el.name.includes(id)) {
                     return el;
                 }
             }
             return null;
         };
-        
+
         window.highlightElementInList = function(elementId) {
             const items = document.querySelectorAll('.element-item');
             items.forEach(function(item) {
@@ -286,7 +288,7 @@
                 }
             });
         };
-        
+
         window.syncSearchField = function(searchText) {
             const searchInput = document.getElementById('search');
             if (searchInput) {
@@ -294,15 +296,12 @@
                 updateElementsList(searchText);
             }
         };
-        
+
         //AQUI
         // LISTENER DE MENSAGENS CORRIGIDO
         window.addEventListener('message', function(event) {
             // Verificação de origem segura simplificada
-            // Verificação de origem segura atualizada
-            if (!event.origin.includes('github.io') && 
-                !event.origin.includes('github.dev') &&
-                !event.origin.includes('streamlit.app')) {
+            if (!event.origin.includes('github.io') && !event.origin.includes('github.dev')) {
                 return;
             }
 
@@ -311,16 +310,16 @@
                 if (event.data && event.data.type === 'streamlit-focus') {
                     const elementId = String(event.data.elementId || '');
                     const element = window.findElementById(elementId);
-                    
+
                     if (element) {
                         // 1. Foco no elemento 3D
                         focusOnElement(element);
-                        
+
                         // 2. Atualização segura do campo de busca
                         const searchInput = document.getElementById('search');
                         if (searchInput) {
                             searchInput.value = elementId;
-                            
+
                             // 3. Atualização da lista
                             const listContainer = document.getElementById('elements-list');
                             if (listContainer) {
@@ -344,12 +343,12 @@
                 console.error('Erro ao processar mensagem:', error);
             }
         });
-        
+
         // 7. CONFIGURAÇÃO DE EVENTOS
         document.getElementById('search').addEventListener('input', function(e) {
             updateElementsList(e.target.value);
         });
-        
+
         // 8. ANIMAÇÃO
         function animate() {
             requestAnimationFrame(animate);
@@ -358,7 +357,7 @@
             renderer.render(scene, camera);
         }
         animate();
-        
+
         window.addEventListener('resize', function() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
