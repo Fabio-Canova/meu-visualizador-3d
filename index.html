@@ -300,47 +300,41 @@
         //AQUI
         // LISTENER DE MENSAGENS CORRIGIDO
         window.addEventListener('message', function(event) {
-            // Verificação de origem segura simplificada
-            if (!event.origin.includes('github.io') && !event.origin.includes('github.dev')) {
+            // Verificação de origem segura atualizada
+            if (!event.origin.includes('github.io') && 
+                !event.origin.includes('github.dev') &&
+                !event.origin.includes('streamlit.app')) {
                 return;
             }
-
-            // Processamento de mensagens seguro
-            try {
-                if (event.data && event.data.type === 'streamlit-focus') {
-                    const elementId = String(event.data.elementId || '');
-                    const element = window.findElementById(elementId);
-
-                    if (element) {
-                        // 1. Foco no elemento 3D
-                        focusOnElement(element);
-
-                        // 2. Atualização segura do campo de busca
-                        const searchInput = document.getElementById('search');
-                        if (searchInput) {
-                            searchInput.value = elementId;
-
-                            // 3. Atualização da lista
-                            const listContainer = document.getElementById('elements-list');
-                            if (listContainer) {
-                                listContainer.innerHTML = '';
-                                const item = document.createElement('div');
-                                item.className = 'element-item highlighted';
-                                item.innerHTML = [
-                                    '<strong>', element.name, '</strong><br>',
-                                    element.family ? '<small>Family: ' + element.family + '</small><br>' : '',
-                                    element.elementId ? '<small>ID: ' + element.elementId + '</small>' : ''
-                                ].join('');
-                                item.addEventListener('click', function() {
-                                    focusOnElement(element);
-                                });
-                                listContainer.appendChild(item);
-                            }
+        
+            // Restante do código do listener permanece igual
+            if (event.data && event.data.type === 'streamlit-focus') {
+                const elementId = String(event.data.elementId || '');
+                const element = window.findElementById(elementId);
+                
+                if (element) {
+                    focusOnElement(element);
+                    
+                    const searchInput = document.getElementById('search');
+                    if (searchInput) {
+                        searchInput.value = elementId;
+                        
+                        // Atualiza a lista para mostrar apenas o elemento
+                        const listContainer = document.getElementById('elements-list');
+                        if (listContainer) {
+                            listContainer.innerHTML = '';
+                            const item = document.createElement('div');
+                            item.className = 'element-item highlighted';
+                            item.innerHTML = `
+                                <strong>${element.name}</strong><br>
+                                ${element.family ? `<small>Family: ${element.family}</small><br>` : ''}
+                                ${element.elementId ? `<small>ID: ${element.elementId}</small>` : ''}
+                            `;
+                            item.addEventListener('click', () => focusOnElement(element));
+                            listContainer.appendChild(item);
                         }
                     }
                 }
-            } catch (error) {
-                console.error('Erro ao processar mensagem:', error);
             }
         });
 
